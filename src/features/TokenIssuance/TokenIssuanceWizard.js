@@ -565,31 +565,31 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
            {/* Buttons */}
            <div className="flex justify-between mt-8">
               <button className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50" onClick={() => setIssuanceScreen('proof-reserves')} > Previous Step </button>
-              <button className="px-4 py-2 rounded text-white hover:opacity-90 bg-green-600" 
-              onClick={() => {
-                const amountToIssue = parseFloat(supplyDetails.initialSupply || 0);
-                const symbolToIssue = tokenDetails.symbol; // Use symbol from tokenDetails state
-
-                if (amountToIssue > 0 && symbolToIssue && tokenDetails.name && tokenDetails.blockchain) { // Added checks for name/blockchain
-                  // Create an object with all relevant details
-                  const newTokenData = {
-                    name: tokenDetails.name,
-                    symbol: symbolToIssue,
-                    blockchain: tokenDetails.blockchain,
-                    initialSupply: amountToIssue,
-                    decimals: supplyDetails.decimals,
-                    valueDefinition: supplyDetails.valueDefinition,
-                    supplyType: supplyDetails.supplyType,
-                    // Add other details like permissions if needed later
+              <button 
+                className="px-4 py-2 rounded text-white hover:opacity-90 bg-green-600"
+                onClick={() => {
+                  // --- NEW CODE START ---
+                  const amountToIssue = parseFloat(supplyDetails.initialSupply || 0); // Ensure amount is parsed
+                
+                  // Create a comprehensive object with ALL collected details
+                  // Using spread syntax to copy properties from state objects
+                  const fullTokenData = {
+                    tokenDetails: { ...tokenDetails },
+                    supplyDetails: { ...supplyDetails, initialSupply: amountToIssue }, // Use parsed amount
+                    permissionDetails: { ...permissionDetails },
+                    reserveDetails: { ...reserveDetails }
                   };
-
-                  console.log("Calling onIssue with:", newTokenData);
-                  onIssue(newTokenData); // Call the function passed from TokenDashboard with the data object
-                } else {
-                   alert("Please ensure Name, Symbol, Blockchain, and Initial Supply are valid.");
-                }
-              }}
-            >
+                
+                  // Basic validation still needed on primary fields within tokenDetails
+                  if (amountToIssue > 0 && fullTokenData.tokenDetails.symbol && fullTokenData.tokenDetails.name && fullTokenData.tokenDetails.blockchain) {
+                    console.log("Calling onIssue with full data:", fullTokenData);
+                    onIssue(fullTokenData); // Pass the comprehensive object back
+                  } else {
+                    alert("Please ensure Name, Symbol, Blockchain, and Initial Supply are valid.");
+                  }
+                  // --- NEW CODE END ---
+                }}
+              >
                 Issue Token
               </button>
             </div>
