@@ -5,7 +5,7 @@ import Sidebar from '../Sidebar/Sidebar';
 // It also receives 'children', which will be the main content for the selected tab
 const Layout = ({ activeTab, setActiveTab, children }) => {
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-slate-300">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       {/* Main Content Area - Offset by sidebar width */}
       <div className="flex-1 overflow-auto ml-64"> {/* Added ml-64 for sidebar offset */}
