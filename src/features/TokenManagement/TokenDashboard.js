@@ -4,12 +4,11 @@ import IssuanceChoiceScreen from '../TokenIssuance/IssuanceChoiceScreen'; // <--
 
 // Initial data for assets
 const initialAssets = [
-  { id: 'usdc', label: 'USDC', balance: 10000000, symbol: 'USDC', description: 'Manage USDC stablecoin reserves.', supply: 'Finite' },
-  { id: 'usdt', label: 'USDT', balance: 8500000, symbol: 'USDT', description: 'Manage USDT stablecoin reserves.', supply: 'Finite' },
-  { id: 't-gold', label: 'Tokenized Gold', balance: 5000, symbol: 'T-GOLD', description: 'Manage reserves for Gold-backed tokens.', supply: 'Finite' },
-  { id: 'e-cedi', label: 'eCedi', balance: 15000000, symbol: 'eGH¢', description: 'Manage reserves for eCedi CBDC.', supply: 'Finite' },
-  { id: 'd-euro', label: 'Digital Euro', balance: 9000000, symbol: 'D-EUR', description: 'Manage reserves for Digital Euro.', supply: 'Finite' },
-  { id: 't-bond', label: 'Tokenized Bonds', balance: 2500000, symbol: 'T-BOND', description: 'Manage reserves for Bond-backed tokens.', supply: 'Finite' }
+  { id: 'usdc', label: 'USDC', balance: 10000000, symbol: 'USDC', description: 'Manage USDC stablecoin reserves.', supply: 'Finite', blockchain: 'Stellar' }, // Example blockchain
+  { id: 'usdt', label: 'USDT', balance: 8500000, symbol: 'USDT', description: 'Manage USDT stablecoin reserves.', supply: 'Finite', blockchain: 'Ethereum' }, // Example blockchain
+  { id: 't-gold', label: 'Tokenized Gold', balance: 5000, symbol: 'T-GOLD', description: 'Manage reserves for Gold-backed tokens.', supply: 'Finite', blockchain: 'Polygon' }, // Example blockchain
+  { id: 'e-cedi', label: 'eCedi', balance: 15000000, symbol: 'eGH¢', description: 'Manage reserves for eCedi CBDC.', supply: 'Finite', blockchain: 'Hedera' }, // Example blockchain
+  { id: 'd-euro', label: 'Digital Euro', balance: 9000000, symbol: 'D-EUR', description: 'Manage reserves for Digital Euro.', supply: 'Finite', blockchain: 'Ethereum' } // Example blockchain
 ];
 
 const TokenDashboard = () => {
@@ -131,6 +130,9 @@ const TokenDashboard = () => {
                 <h3 className="font-bold border-b pb-2 mb-2 text-gray-800">{asset.label}</h3>
                 <p className="text-sm text-gray-600 mb-3 flex-grow">{asset.description}</p>
                 <p className="text-xs text-gray-500 mb-3">Supply: {asset.supply}</p>
+                {asset.blockchain && ( // Only display if blockchain property exists
+                   <p className="text-xs text-gray-400 mb-3">On: {asset.blockchain}</p>
+                )}
                 <div className="mt-auto bg-gray-100 p-3 rounded">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-700">Balance:</span>
