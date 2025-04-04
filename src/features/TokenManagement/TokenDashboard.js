@@ -24,19 +24,50 @@ const TokenDashboard = () => {
   };
 
   // Handles simulated token issuance from the wizard
-  const handleIssueToken = (symbol, amount) => {
-    console.log(`Issuing ${amount} of ${symbol}`);
+  // --- CORRECTED Function to handle token issuance ---
+  const handleIssueToken = (newTokenData) => {
+    console.log(`Processing issuance for:`, newTokenData);
+
+    // Ensure amount is a number before proceeding
+    const amountToAdd = newTokenData.initialSupply; // Already parsed in wizard, should be number
+    if (typeof amountToAdd !== 'number' || isNaN(amountToAdd) || amountToAdd <= 0) {
+         console.error("Invalid amount received for issuance:", newTokenData.initialSupply);
+         alert("An error occurred: Invalid amount for issuance.");
+         setCurrentView('dashboard'); // Go back even if error
+         return; // Stop processing
+    }
+
     setAssets(currentAssets => {
-      return currentAssets.map(asset => {
-        if (asset.symbol === symbol) {
-          return { ...asset, balance: asset.balance + amount };
-        }
-        return asset;
-      });
+      const existingAssetIndex = currentAssets.findIndex(asset => asset.symbol === newTokenData.symbol);
+
+      if (existingAssetIndex !== -1) {
+        console.log("Existing asset found. Updating balance.");
+        return currentAssets.map((asset, index) => {
+          if (index === existingAssetIndex) {
+            // --- FIX 1: Use newTokenData.initialSupply ---
+            return { ...asset, balance: asset.balance + amountToAdd };
+          }
+          return asset;
+        });
+      } else {
+        console.log("New asset. Adding to list.");
+        const newAssetCard = {
+          id: newTokenData.symbol.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+          label: newTokenData.name,
+          balance: amountToAdd, // Use the validated amount
+          symbol: newTokenData.symbol,
+          description: `Manage ${newTokenData.name} (${newTokenData.symbol}) on ${newTokenData.blockchain}.`, // <-- ENSURE THIS LINE IS EXACTLY LIKE THIS
+            supply: newTokenData.supplyType === 'infinite' ? 'Infinite' : 'Finite'
+        };
+        return [...currentAssets, newAssetCard];
+      }
     });
-    setCurrentView('dashboard'); // Go back to dashboard after issuance
-    alert(`${amount.toLocaleString()} ${symbol} issued successfully!`);
+
+    setCurrentView('dashboard');
+    // --- FIX 2: Use newTokenData properties in alert ---
+    alert(`${amountToAdd.toLocaleString()} ${newTokenData.symbol} processed successfully!`);
   };
+  // --- END OF CORRECTED FUNCTION ---
 
   // --- ADDED: Handlers for Issuance Choice Screen ---
   const handleNavigateNew = () => {
