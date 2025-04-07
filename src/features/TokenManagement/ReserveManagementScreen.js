@@ -32,14 +32,20 @@ const downloadCSV = (csvContent, filename) => {
  * tokens, view details, generate simulated reports, view all accounts in a modal,
  * and configure simulated reserve ratio alerts. It uses hardcoded dummy data for
  * predefined assets and generates fallback data for user-issued tokens based on
- * their current balance and issuance configuration.
+ * their current balance and issuance configuration. Logs alert changes via callback.
  *
  * @param {object} props - Component props.
  * @param {Array} props.assets - The list of all available assets (predefined and user-issued).
  * @param {object} props.assetLogosMap - A map of asset IDs/symbols to their logo image paths.
  * @param {function} props.onBack - Callback function to navigate back to the previous view (e.g., dashboard).
+ * @param {function} props.onLogReserveAlertChange - Callback function to log the alert change event in the parent.
  */
-const ReserveManagementScreen = ({ assets = [], assetLogosMap = {}, onBack }) => {
+const ReserveManagementScreen = ({
+    assets = [],
+    assetLogosMap = {},
+    onBack,
+    onLogReserveAlertChange // <-- Accept the new prop
+}) => {
 
   const [selectedAssetId, setSelectedAssetId] = useState(assets[0]?.id || '');
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
@@ -57,13 +63,10 @@ const ReserveManagementScreen = ({ assets = [], assetLogosMap = {}, onBack }) =>
   const [currentThresholdInput, setCurrentThresholdInput] = useState('');
   const [showAllAccountsModal, setShowAllAccountsModal] = useState(false);
 
-
   // Find the currently selected asset object from the assets list.
   const selectedAsset = assets.find(a => a.id === selectedAssetId);
 
   // Determine the reserve information to display.
-  // Try finding specific dummy data first. If not found and it's a user-issued token,
-  // generate fallback information based on the asset's state and wizard configuration.
   let reserveInfo = null;
   if (selectedAsset) {
     reserveInfo = dummyReserveData[selectedAssetId]; // Lookup using ID
@@ -86,7 +89,7 @@ const ReserveManagementScreen = ({ assets = [], assetLogosMap = {}, onBack }) =>
       }
       reserveInfo = {
         circulation: selectedAsset.balance,
-        circulationChange: selectedAsset.balance,
+        circulationChange: selectedAsset.balance, // Maybe should be 0 for new tokens? Or track changes separately. Using balance for now.
         ratio: isBacked ? 100.0 : 'N/A',
         requirement: 100,
         lastAudit: 'N/A (User Issued)',
@@ -108,7 +111,6 @@ const ReserveManagementScreen = ({ assets = [], assetLogosMap = {}, onBack }) =>
       setCurrentThresholdInput(String(currentThreshold));
     }
   }, [isAlertModalOpen, selectedAsset, currentThreshold]);
-
 
   // --- Action Handlers ---
 
@@ -143,14 +145,29 @@ const ReserveManagementScreen = ({ assets = [], assetLogosMap = {}, onBack }) =>
   // Opens the modal for configuring reserve alerts.
   const handleOpenAlertModal = () => { if (selectedAsset) setIsAlertModalOpen(true); };
 
-  // Saves the new alert threshold entered in the modal.
+  // Saves the new alert threshold entered in the modal - MODIFIED
   const handleSaveThreshold = () => {
      if (!selectedAsset) return;
      const newThreshold = parseFloat(currentThresholdInput);
+
      if (!isNaN(newThreshold) && newThreshold >= 0 && newThreshold <= 200) {
+       // Update local state for thresholds
        setAlertThresholds(prev => ({ ...prev, [selectedAssetId]: newThreshold }));
-       setIsAlertModalOpen(false);
-       alert(`Alert threshold for ${selectedAsset.label} set to ${newThreshold}%`);
+
+       // --- Call log callback ---
+       if (typeof onLogReserveAlertChange === 'function') {
+            onLogReserveAlertChange({
+                assetId: selectedAsset.id,
+                symbol: selectedAsset.symbol,
+                threshold: newThreshold
+            });
+       } else {
+           console.warn("onLogReserveAlertChange prop is not available.");
+       }
+       // --- END Call ---
+
+       setIsAlertModalOpen(false); // Close modal
+       alert(`Alert threshold for ${selectedAsset.label} set to ${newThreshold}%`); // Keep user alert
      } else {
        alert("Please enter a valid percentage between 0 and 200.");
      }
