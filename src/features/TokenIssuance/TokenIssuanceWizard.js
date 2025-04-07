@@ -1,30 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-// Sample countries for the dropdown - can be expanded or replaced with a library later
+// Sample countries (keep as is or replace)
 const sampleCountries = [
   { code: 'US', name: 'United States' }, { code: 'GB', name: 'United Kingdom' }, { code: 'CA', name: 'Canada' }, { code: 'EU', name: 'European Union (Region)' }, { code: 'SG', name: 'Singapore' }, { code: 'GH', name: 'Ghana' }, { code: 'OTHER', name: 'Other/Multiple' },
 ];
 
 /**
  * A multi-step wizard component for guiding users through the process of issuing a new token.
- * It manages the state for each step's data and navigates between steps.
- * Calls `onBack` to return to the previous view or `onIssue` with the compiled token data upon completion.
+ * Includes a simulated multi-step approval workflow (Compliance, Management) before final issuance.
+ * Manages the state for wizard steps, approval workflow, and collected token data.
+ * Calls `onBack` to return to the previous view or `onIssue` with the compiled token data upon successful approval and final confirmation.
+ *
  * @param {object} props - Component props.
  * @param {function} props.onBack - Callback function to navigate back (e.g., to the dashboard).
- * @param {function} props.onIssue - Callback function triggered upon successful finalization, passing the complete token configuration data.
+ * @param {function} props.onIssue - Callback function triggered upon successful finalization *after* workflow approval, passing the complete token configuration data.
  */
 const TokenIssuanceWizard = ({ onBack, onIssue }) => {
-  // State variable to track the current visible step/screen in the wizard.
-  const [issuanceScreen, setIssuanceScreen] = useState('token-details'); // Initialize to the first step
+  // State for wizard step
+  const [issuanceScreen, setIssuanceScreen] = useState('token-details');
 
-  // State objects holding the configuration data collected across wizard steps.
+  // State for collected data across wizard steps
   const [tokenDetails, setTokenDetails] = useState({ name: '', symbol: '', blockchain: '', tokenType: '' });
   const [supplyDetails, setSupplyDetails] = useState({ initialSupply: '', supplyType: 'finite', decimals: '18', metadata: '', valueDefinition: '' });
   const [permissionDetails, setPermissionDetails] = useState({ kycEnabled: false, feeScheduleEnabled: false, pausable: true, fungible: true, expiration: '', roles: [] });
   const [reserveDetails, setReserveDetails] = useState({ isBackedAsset: false, backingType: '', bankName: '', accountNumberLast4: '', contractNetwork: '', contractAddress: '', custodianName: '', attestationFrequency: '', isConfigured: false });
-  const [regulatoryInfo, setRegulatoryInfo] = useState([]); // Holds { country: '', regulator: '' } objects
+  const [regulatoryInfo, setRegulatoryInfo] = useState([]);
 
-  // Temporary state variables for input fields within specific steps before confirmation.
+  // Temporary state variables for inputs within steps
   const [selectedRole, setSelectedRole] = useState('');
   const [roleAddress, setRoleAddress] = useState('');
   const [tempBankName, setTempBankName] = useState('');
@@ -36,97 +38,217 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
   const [selectedCountry, setSelectedCountry] = useState('');
   const [regulatorName, setRegulatorName] = useState('');
 
-  /**
-   * Handles adding a role assignment (e.g., Admin, Minter) to the permissionDetails state.
-   * Validates inputs, creates a role object, updates the roles array, and clears temporary inputs.
-   * @param {React.SyntheticEvent} event - The event object, used to prevent default form submission.
-   */
-  const handleAddRole = (event) => {
-    event.preventDefault();
-    if (!selectedRole || !roleAddress.trim()) { alert('Please select a role and enter a valid address.'); return; }
-    const newRole = { role: selectedRole, address: roleAddress };
-    console.log("Adding role:", newRole); // Keep console log for debugging if desired
-    setPermissionDetails(prev => ({ ...prev, roles: [...prev.roles, newRole] }));
-    setSelectedRole(''); setRoleAddress('');
-  };
+  // --- State for Approval Workflow ---
+  const [workflowState, setWorkflowState] = useState('idle'); // 'idle', 'pending_compliance', 'pending_management', 'approved', 'rejected'
+  const [workflowMessage, setWorkflowMessage] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [finalTokenData, setFinalTokenData] = useState(null); // To store compiled data during workflow
+
+  // --- Helper Functions (Add Role, Add Regulatory Info, Connect Bank/Contract/Custodian - Keep existing functions) ---
+    const handleAddRole = (event) => {
+        event.preventDefault();
+        if (!selectedRole || !roleAddress.trim()) { alert('Please select a role and enter a valid address.'); return; }
+        const newRole = { role: selectedRole, address: roleAddress };
+        setPermissionDetails(prev => ({ ...prev, roles: [...prev.roles, newRole] }));
+        setSelectedRole(''); setRoleAddress('');
+    };
+
+    const handleAddRegulatoryInfo = (event) => {
+        event.preventDefault();
+        if (!selectedCountry || !regulatorName.trim()) { alert('Please select a country and enter a regulator name.'); return; }
+        const newInfo = { country: selectedCountry, regulator: regulatorName.trim() };
+        setRegulatoryInfo(prev => [...prev, newInfo]);
+        setRegulatorName(''); // Clear only regulator name
+    };
+
+    const handleConnectBank = (event) => {
+        event.preventDefault();
+        const last4 = tempAccountNumber.slice(-4);
+        setReserveDetails(prev => ({ ...prev, bankName: tempBankName, accountNumberLast4: last4, backingType: 'bank', isConfigured: true }));
+        setTempBankName(''); setTempAccountNumber('');
+    };
+
+    const handleConnectContract = (event) => {
+        event.preventDefault();
+        setReserveDetails(prev => ({...prev, contractNetwork: tempContractNetwork, contractAddress: tempContractAddress, backingType: 'smartcontract', isConfigured: true }));
+        setTempContractAddress('');
+    };
+
+    const handleSetupCustodian = (event) => {
+        event.preventDefault();
+        setReserveDetails(prev => ({ ...prev, custodianName: tempCustodianName, attestationFrequency: tempAttestationFreq, backingType: 'custodian', isConfigured: true }));
+        setTempCustodianName('');
+    };
+
+
+  // --- Workflow Effect Hook ---
+  useEffect(() => {
+    setIsLoading(false); // Reset loading indicator on state change
+
+    switch (workflowState) {
+      case 'pending_compliance':
+        setWorkflowMessage('Issuance request sent to Compliance for review.');
+        break;
+      case 'pending_management':
+        setWorkflowMessage('Compliance approved. Request sent to Management for final review.');
+        break;
+      case 'approved':
+        setWorkflowMessage('Issuance request fully approved. Ready to execute.');
+        break;
+      case 'rejected':
+        setWorkflowMessage('Issuance request rejected.');
+        break;
+      default: // 'idle' or other states
+        setWorkflowMessage('');
+        setRejectReason('');
+        setFinalTokenData(null); // Clear compiled data if workflow resets
+        break;
+    }
+  }, [workflowState]);
+
+
+  // --- Workflow Action Handlers ---
 
   /**
-   * Handles adding regulatory information (country + regulator) to the state list.
-   * Validates inputs, creates an info object, updates the regulatoryInfo array, and clears temporary inputs.
-   * @param {React.SyntheticEvent} event - The event object, used to prevent default form submission.
+   * Validates final data and initiates the simulated approval workflow.
+   * Stores the compiled data in `finalTokenData` state.
    */
-  const handleAddRegulatoryInfo = (event) => {
-    event.preventDefault();
-    if (!selectedCountry || !regulatorName.trim()) { alert('Please select a country and enter a regulator name.'); return; }
-    const newInfo = { country: selectedCountry, regulator: regulatorName.trim() };
-    console.log("Adding regulatory info:", newInfo); // Keep console log for debugging if desired
-    setRegulatoryInfo(prev => [...prev, newInfo]);
-    setRegulatorName(''); // Clear only regulator name
+  const handleInitiateIssuanceApproval = () => {
+    // Compile final data
+    const amountToIssue = parseFloat(supplyDetails.initialSupply || 0);
+    const fullTokenData = {
+      tokenDetails: { ...tokenDetails },
+      supplyDetails: { ...supplyDetails, initialSupply: amountToIssue },
+      permissionDetails: { ...permissionDetails },
+      reserveDetails: { ...reserveDetails },
+      regulatoryInfo: [...regulatoryInfo]
+    };
+
+    // Final Validation before starting workflow
+    if (!(amountToIssue > 0 &&
+        fullTokenData.tokenDetails.symbol &&
+        fullTokenData.tokenDetails.name &&
+        fullTokenData.tokenDetails.blockchain &&
+        fullTokenData.tokenDetails.tokenType &&
+        (!fullTokenData.reserveDetails.isBackedAsset || fullTokenData.reserveDetails.isConfigured)))
+    {
+      alert("Please ensure Name, Symbol, Blockchain, Token Type, Initial Supply are valid, and Reserve Details are configured if asset-backed.");
+      return;
+    }
+
+    console.log("Initiating issuance approval with data:", fullTokenData);
+    setFinalTokenData(fullTokenData); // Store data for later use
+    setWorkflowState('pending_compliance'); // Start workflow
   };
 
-  /**
-   * Handles the confirmation of Bank Account details for Proof of Reserves.
-   * Updates the main reserveDetails state with confirmed bank info, sets isConfigured flag,
-   * and clears temporary bank input fields.
-   * @param {React.SyntheticEvent} event - The event object, used to prevent default form submission.
-   */
-  const handleConnectBank = (event) => {
-    event.preventDefault();
-    const last4 = tempAccountNumber.slice(-4);
-    setReserveDetails(prev => ({ ...prev, bankName: tempBankName, accountNumberLast4: last4, backingType: 'bank', isConfigured: true }));
-    setTempBankName(''); setTempAccountNumber('');
+  /** Simulates an approval step (Compliance or Management). */
+  const handleApproval = (step) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    setWorkflowMessage(`Processing ${step} approval... (Simulating delay)`);
+
+    setTimeout(() => {
+      if (step === 'compliance') {
+        setWorkflowState('pending_management');
+      } else if (step === 'management') {
+        setWorkflowState('approved');
+      }
+    }, 1500); // Simulate 1.5 second delay
   };
 
-  /**
-   * Handles the confirmation of Smart Contract details for Proof of Reserves.
-   * Updates the main reserveDetails state with confirmed contract info, sets isConfigured flag,
-   * and clears temporary contract input fields.
-   * @param {React.SyntheticEvent} event - The event object, used to prevent default form submission.
-   */
-  const handleConnectContract = (event) => {
-    event.preventDefault();
-    setReserveDetails(prev => ({...prev, contractNetwork: tempContractNetwork, contractAddress: tempContractAddress, backingType: 'smartcontract', isConfigured: true }));
-    setTempContractAddress('');
+  /** Simulates a rejection step, prompting for a reason. */
+  const handleReject = (rejectedBy) => {
+    if (isLoading) return;
+    const reason = prompt(`Enter reason for rejection by ${rejectedBy} (optional):`);
+    setIsLoading(true);
+    setWorkflowMessage(`Processing rejection... (Simulating delay)`);
+
+    setTimeout(() => {
+      setRejectReason(reason || 'No reason provided.');
+      setWorkflowState('rejected');
+    }, 1000); // Simulate 1 second delay
   };
 
-  /**
-   * Handles the confirmation of Custodian details for Proof of Reserves.
-   * Updates the main reserveDetails state with confirmed custodian info, sets isConfigured flag,
-   * and clears temporary custodian input fields.
-   * @param {React.SyntheticEvent} event - The event object, used to prevent default form submission.
-   */
-  const handleSetupCustodian = (event) => {
-    event.preventDefault();
-    setReserveDetails(prev => ({ ...prev, custodianName: tempCustodianName, attestationFrequency: tempAttestationFreq, backingType: 'custodian', isConfigured: true }));
-    setTempCustodianName('');
+  /** Handles the final execution of the issuance after workflow approval and user confirmation. */
+  const handleExecuteIssue = () => {
+    if (isLoading || workflowState !== 'approved' || !finalTokenData) return;
+
+    const confirmMsg = `You are about to issue ${finalTokenData.supplyDetails.initialSupply.toLocaleString()} ${finalTokenData.tokenDetails.symbol} tokens.\n\nThis action will finalize the token creation based on the approved details.\n\nProceed?`;
+
+    if (window.confirm(confirmMsg)) {
+        console.log("Executing onIssue with final data:", finalTokenData);
+        onIssue(finalTokenData); // Calls the original callback passed from the parent
+        // Reset workflow state after successful issuance if needed, or rely on parent navigation
+        // setWorkflowState('idle');
+    } else {
+        console.log("Final issuance execution cancelled by user.");
+    }
   };
 
-  /**
-   * Renders the visual progress indicator (steps) at the top of the wizard.
-   * Highlights the current step and marks completed steps.
-   * @returns {React.ReactElement} The JSX for the progress steps UI.
-   */
+  /** Handles cancelling the active workflow request */
+  const handleCancelRequest = () => {
+      if (window.confirm("Are you sure you want to cancel this issuance request?")) {
+          setWorkflowState('idle'); // Reset workflow, keeps wizard data
+      }
+  }
+
+  // --- Render Logic ---
+
+  /** Renders the visual progress indicator (steps) */
   const renderProgressSteps = () => {
     const steps = ['Token Details', 'Supply & Metadata', 'Permissions', 'Proof of Reserves', 'Finalization'];
     const currentStepIndex = steps.findIndex(step => step.toLowerCase().replace(/ & | /g, '-').includes(issuanceScreen.split('-')[0]) || (issuanceScreen === 'proof-reserves' && step === 'Proof of Reserves') || (issuanceScreen === 'finalization' && step === 'Finalization') );
-    return ( <div className="mb-8"><div className="flex items-center justify-between">{steps.map((step, index) => (<React.Fragment key={step}><div className="w-1/5 text-center"><div className={`rounded-full h-10 w-10 flex items-center justify-center mx-auto ${ index < currentStepIndex ? 'bg-green-600 text-white' : (index === currentStepIndex ? 'bg-emtech-gold text-white' : 'bg-gray-200 text-gray-600') }`}>{index < currentStepIndex ? '✓' : index + 1}</div><p className={`mt-1 text-sm ${index <= currentStepIndex ? 'font-medium text-gray-800' : 'text-gray-500'}`}>{step}</p></div>{index < steps.length - 1 && ( <div className={`flex-1 h-1 ${index < currentStepIndex ? 'bg-green-600' : 'bg-gray-200'}`}></div> )}</React.Fragment>))}</div></div> );
+    // Only render steps if workflow is idle (i.e. wizard is active)
+    if (workflowState !== 'idle' && issuanceScreen !== 'finalization') return null;
+    // Highlight finalization step even when workflow is active on that screen
+    const activeIndex = (workflowState !== 'idle' && issuanceScreen === 'finalization') ? steps.length -1 : currentStepIndex;
+
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => (
+            <React.Fragment key={step}>
+              <div className="w-1/5 text-center">
+                <div className={`rounded-full h-10 w-10 flex items-center justify-center mx-auto ${
+                  index < activeIndex ? 'bg-green-600 text-white' : (index === activeIndex ? 'bg-emtech-gold text-white' : 'bg-gray-200 text-gray-600')
+                }`}>
+                  {index < activeIndex ? '✓' : index + 1}
+                </div>
+                <p className={`mt-1 text-sm ${index <= activeIndex ? 'font-medium text-gray-800' : 'text-gray-500'}`}>{step}</p>
+              </div>
+              {index < steps.length - 1 && (
+                <div className={`flex-1 h-1 ${index < activeIndex ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    );
   };
 
-  // Main render function: Renders the overall wizard structure, progress steps,
-  // and conditionally renders the content for the current step based on 'issuanceScreen' state.
   return (
     <div className="p-8">
       <div className="bg-white p-6 rounded shadow max-w-4xl mx-auto">
-        {/* Header with title and back button */}
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Issue New Tokens</h1>
-          <button className="px-3 py-1 rounded text-white hover:opacity-90 bg-gray-800 text-sm" onClick={onBack} > Back to Dashboard </button>
+          {/* Back button logic depends on wizard/workflow state */}
+          <button
+            className="px-3 py-1 rounded text-white hover:opacity-90 bg-gray-800 text-sm disabled:opacity-50"
+            onClick={workflowState === 'idle' ? onBack : handleCancelRequest} // Go back if idle, offer cancel if workflow active
+            disabled={isLoading && workflowState !== 'idle'} // Disable cancel if processing
+          >
+            {workflowState === 'idle' ? 'Back to Dashboard' : 'Cancel Issuance Request'}
+          </button>
         </div>
 
         {renderProgressSteps()}
 
+        {/* --- Wizard Step Content (Render conditionally based on issuanceScreen IF workflow is idle) --- */}
+
         {/* Step 1: Token Details */}
-        {issuanceScreen === 'token-details' && (
+        {issuanceScreen === 'token-details' && workflowState === 'idle' && (
            <div>
              <h2 className="text-xl font-medium mb-4 text-gray-800">Token Details</h2>
              <p className="text-gray-600 mb-6">Define the basic information for your new token.</p>
@@ -142,11 +264,11 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
                {/* Regulatory Info */}
                 <div className="border rounded-lg p-4 bg-gray-50 mt-6">
                    <label className="block mb-2"><span className="font-medium">Regulatory Information</span><p className="text-sm text-gray-600">Specify jurisdictions and regulatory bodies (optional)</p></label>
-                   <div className="flex space-x-2 items-center">
+                   <form onSubmit={handleAddRegulatoryInfo} className="flex space-x-2 items-center">
                      <select className="flex-1 p-2 border rounded" value={selectedCountry} onChange={(e) => setSelectedCountry(e.target.value)} > <option value="">Select Country/Jurisdiction</option> {sampleCountries.map(country => ( <option key={country.code} value={country.name}>{country.name}</option> ))} </select>
                      <input type="text" className="flex-1 p-2 border rounded" placeholder="Regulatory Body Name (e.g., SEC)" value={regulatorName} onChange={(e) => setRegulatorName(e.target.value)} />
-                     <button className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50" onClick={handleAddRegulatoryInfo} disabled={!selectedCountry || !regulatorName.trim()} type="button" > Add </button>
-                   </div>
+                     <button className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50" disabled={!selectedCountry || !regulatorName.trim()} type="submit" > Add </button>
+                   </form>
                    <div className="mt-4 p-3 border rounded bg-white min-h-[50px]">
                      {regulatoryInfo.length === 0 ? ( <p className="text-sm text-gray-500 italic">No regulatory information added yet.</p> ) : ( <ul className="space-y-1">{regulatoryInfo.map((info, index) => ( <li key={index} className="text-sm border-b last:border-b-0 py-1"><strong>{info.country}:</strong> {info.regulator}</li> ))}</ul> )}
                    </div>
@@ -158,8 +280,8 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
         )}
 
         {/* Step 2: Supply & Metadata */}
-        {issuanceScreen === 'supply-metadata' && (
-           <div>
+        {issuanceScreen === 'supply-metadata' && workflowState === 'idle' && (
+            <div>
              <h2 className="text-xl font-medium mb-4 text-gray-800">Supply and Metadata</h2>
              <p className="text-gray-600 mb-6">Configure token supply settings and metadata.</p>
              <div className="space-y-4">
@@ -173,14 +295,31 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
            </div>
         )}
 
-         {/* Step 3: Permissions */}
-         {issuanceScreen === 'permissions' && (
-            <div>
+        {/* Step 3: Permissions */}
+        {issuanceScreen === 'permissions' && workflowState === 'idle' && (
+             <div>
               <h2 className="text-xl font-medium mb-4 text-gray-800">Permissions</h2>
               <p className="text-gray-600 mb-6">Configure token permissions and functional features.</p>
               <div className="space-y-6">
-                {/* KYC */}
-                <div className="border rounded-lg p-4 bg-gray-50"> <label className="flex items-center mb-3 cursor-pointer"> <input type="checkbox" className="mr-2 h-4 w-4 text-emtech-gold focus:ring-emtech-gold" checked={permissionDetails.kycEnabled} onChange={(e) => setPermissionDetails({...permissionDetails, kycEnabled: e.target.checked})} /> <div><p className="font-medium">KYC Permissions / Account Flags</p><p className="text-sm text-gray-600">Require accounts to be KYC verified before holding or transferring tokens</p></div> </label> {permissionDetails.kycEnabled && ( <div className="ml-6 mt-2 p-3 border rounded bg-white"> <p className="text-sm font-medium mb-2">Select KYC Requirements:</p> <div className="space-y-2"><label className="flex items-center"><input type="checkbox" className="mr-2" /> <span className="text-sm">Basic Identity Verification</span></label> <label className="flex items-center"><input type="checkbox" className="mr-2" /> <span className="text-sm">Enhanced Due Diligence</span></label> <label className="flex items-center"><input type="checkbox" className="mr-2" /> <span className="text-sm">Accredited Investor Status</span></label> <label className="flex items-center"><input type="checkbox" className="mr-2" /> <span className="text-sm">Jurisdiction Restrictions</span></label></div> </div> )} </div>
+
+                {/* KYC - MODIFIED SECTION */}
+                <div className="border rounded-lg p-4 bg-gray-50">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mr-2 h-4 w-4 text-emtech-gold focus:ring-emtech-gold"
+                      checked={permissionDetails.kycEnabled}
+                      onChange={(e) => setPermissionDetails({...permissionDetails, kycEnabled: e.target.checked})}
+                    />
+                    <div>
+                      <p className="font-medium">KYC Permissions / Account Flags</p>
+                      <p className="text-sm text-gray-600">Require accounts to be KYC verified before holding or transferring tokens</p>
+                    </div>
+                  </label>
+                  {/* Intentionally removed the conditional block for detailed KYC requirements */}
+                </div>
+                {/* END OF MODIFIED KYC SECTION */}
+
                 {/* Fees */}
                 <div className="border rounded-lg p-4 bg-gray-50"> <label className="flex items-center mb-3 cursor-pointer"> <input type="checkbox" className="mr-2 h-4 w-4 text-emtech-gold focus:ring-emtech-gold" checked={permissionDetails.feeScheduleEnabled} onChange={(e) => setPermissionDetails({...permissionDetails, feeScheduleEnabled: e.target.checked})} /> <div><p className="font-medium">Fee Schedule</p><p className="text-sm text-gray-600">Apply transaction fees when tokens are transferred</p></div> </label> {permissionDetails.feeScheduleEnabled && ( <div className="ml-6 mt-2 p-3 border rounded bg-white"> <div className="space-y-3"><div><label className="block text-sm font-medium mb-1">Fee Recipient</label><input type="text" className="w-full p-2 border rounded text-sm" placeholder="Enter wallet address" /></div> <div><label className="block text-sm font-medium mb-1">Transaction Fee (%)</label><input type="text" className="w-full p-2 border rounded text-sm" placeholder="e.g. 0.1%" /></div> <div><label className="block text-sm font-medium mb-1">Fee Cap</label><input type="text" className="w-full p-2 border rounded text-sm" placeholder="Maximum fee amount" /></div></div> </div> )} </div>
                 {/* Pausable & Fungibility */}
@@ -188,16 +327,16 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
                 {/* Expiration */}
                 <div className="border rounded-lg p-4 bg-gray-50"> <label className="block mb-2"><span className="font-medium">Token Expiration</span><p className="text-sm text-gray-600">Set an expiration date for the token (optional)</p></label> <input type="date" className="w-full p-2 border rounded" min={new Date().toISOString().split('T')[0]} value={permissionDetails.expiration} onChange={(e) => setPermissionDetails({...permissionDetails, expiration: e.target.value})} /> </div>
                 {/* Role Assignments */}
-                <div className="border rounded-lg p-4 bg-gray-50"> <label className="block mb-2"><span className="font-medium">Role Assignments</span><p className="text-sm text-gray-600">Assign administrative roles for this token</p></label> <div className="flex space-x-2 items-center"> <select className="flex-1 p-2 border rounded" value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} > <option value="">Select Role</option> <option value="Admin">Admin</option> <option value="Minter">Minter</option> <option value="Burner">Burner</option> <option value="Pauser">Pauser</option> <option value="KYC Administrator">KYC Administrator</option> </select> <input type="text" className="flex-1 p-2 border rounded" placeholder="Account address (e.g., 0x...)" value={roleAddress} onChange={(e) => setRoleAddress(e.target.value)} /> <button className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50" onClick={handleAddRole} disabled={!selectedRole || !roleAddress} type="button" > Add </button> </div> <div className="mt-4 p-3 border rounded bg-white min-h-[50px]"> {permissionDetails.roles.length === 0 ? (<p className="text-sm text-gray-500 italic">No roles assigned yet. Add a role above.</p>) : (<ul className="space-y-1 list-disc list-inside">{permissionDetails.roles.map((roleItem, index) => (<li key={index} className="text-sm"><strong>{roleItem.role}:</strong> {roleItem.address}</li>))}</ul>)} </div> </div>
+                <div className="border rounded-lg p-4 bg-gray-50"> <label className="block mb-2"><span className="font-medium">Role Assignments</span><p className="text-sm text-gray-600">Assign administrative roles for this token</p></label> <form onSubmit={handleAddRole} className="flex space-x-2 items-center"> <select className="flex-1 p-2 border rounded" value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} > <option value="">Select Role</option> <option value="Admin">Admin</option> <option value="Minter">Minter</option> <option value="Burner">Burner</option> <option value="Pauser">Pauser</option> <option value="KYC Administrator">KYC Administrator</option> </select> <input type="text" className="flex-1 p-2 border rounded" placeholder="Account address (e.g., 0x...)" value={roleAddress} onChange={(e) => setRoleAddress(e.target.value)} /> <button className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50" disabled={!selectedRole || !roleAddress} type="submit" > Add </button> </form> <div className="mt-4 p-3 border rounded bg-white min-h-[50px]"> {permissionDetails.roles.length === 0 ? (<p className="text-sm text-gray-500 italic">No roles assigned yet. Add a role above.</p>) : (<ul className="space-y-1 list-disc list-inside">{permissionDetails.roles.map((roleItem, index) => (<li key={index} className="text-sm"><strong>{roleItem.role}:</strong> {roleItem.address}</li>))}</ul>)} </div> </div>
               </div>
               {/* Navigation Buttons */}
               <div className="flex justify-between mt-8"> <button className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50" onClick={() => setIssuanceScreen('supply-metadata')} > Previous Step </button> <button className="px-4 py-2 rounded text-white hover:opacity-90 bg-emtech-gold" onClick={() => setIssuanceScreen('proof-reserves')} > Next Step </button> </div>
             </div>
-         )}
+        )}
 
         {/* Step 4: Proof of Reserves */}
-        {issuanceScreen === 'proof-reserves' && (
-           <div>
+        {issuanceScreen === 'proof-reserves' && workflowState === 'idle' && (
+            <div>
              <h2 className="text-xl font-medium mb-4 text-gray-800">Proof of Reserves</h2>
              <p className="text-gray-600 mb-6">Specify if your token is backed by real-world assets and how those assets are verified.</p>
              <div className="space-y-6">
@@ -247,25 +386,87 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
            </div>
         )}
 
-        {/* Step 5: Finalization */}
+        {/* Step 5: Finalization & Workflow */}
         {issuanceScreen === 'finalization' && (
            <div>
              <h2 className="text-xl font-medium mb-4 text-gray-800">Finalization</h2>
-             <p className="text-gray-600 mb-6">Review details below and click 'Issue Token' to finalize.</p>
-             {/* Review Summary */}
-             <div className='p-4 border rounded bg-gray-50 mb-6 space-y-2 text-sm'>
-                <p><strong>Name:</strong> {tokenDetails.name || 'N/A'}</p> <p><strong>Symbol:</strong> {tokenDetails.symbol || 'N/A'}</p> <p><strong>Blockchain:</strong> {tokenDetails.blockchain || 'N/A'}</p> <p><strong>Token Type:</strong> {tokenDetails.tokenType || 'N/A'}</p> <p><strong>Amount to Issue:</strong> {supplyDetails.initialSupply ? parseFloat(supplyDetails.initialSupply).toLocaleString() : 'N/A'}</p> <p><strong>Value Definition:</strong> {supplyDetails.valueDefinition || 'N/A'}</p> <p><strong>Supply Type:</strong> {supplyDetails.supplyType === 'finite' ? 'Finite' : 'Infinite'}</p> <p><strong>Decimals:</strong> {supplyDetails.decimals}</p> <p><strong>KYC Enabled:</strong> {permissionDetails.kycEnabled ? 'Yes' : 'No'}</p> <p><strong>Fees Enabled:</strong> {permissionDetails.feeScheduleEnabled ? 'Yes' : 'No'}</p> <p><strong>Pausable:</strong> {permissionDetails.pausable ? 'Yes' : 'No'}</p> <p><strong>Fungible:</strong> {permissionDetails.fungible ? 'Yes' : 'No'}</p> <p><strong>Expiration:</strong> {permissionDetails.expiration || 'None'}</p>
-                <p><strong>Roles:</strong></p> {permissionDetails.roles.length > 0 ? ( <ul className='list-disc list-inside ml-4'>{permissionDetails.roles.map((r, i) => <li key={i}>{r.role}: {r.address}</li>)}</ul> ) : ( <p className='ml-4 italic'>None specified</p> )}
-                <p><strong>Regulatory Info:</strong></p> {regulatoryInfo.length > 0 ? ( <ul className='list-disc list-inside ml-4'>{regulatoryInfo.map((info, i) => <li key={i}>{info.country}: {info.regulator}</li>)}</ul> ) : ( <p className='ml-4 italic'>None specified</p> )}
-                <p><strong>Asset Backed:</strong> {reserveDetails.isBackedAsset ? 'Yes' : 'No'}</p> {reserveDetails.isBackedAsset && reserveDetails.isConfigured && ( <div className='ml-4'><p><strong>Backing Type:</strong> {reserveDetails.backingType}</p> {reserveDetails.backingType === 'bank' && <p>Bank Name: {reserveDetails.bankName}, Account ending: {reserveDetails.accountNumberLast4}</p>} {reserveDetails.backingType === 'smartcontract' && <p>Network: {reserveDetails.contractNetwork}, Address: {reserveDetails.contractAddress}</p>} {reserveDetails.backingType === 'custodian' && <p>Custodian: {reserveDetails.custodianName}, Frequency: {reserveDetails.attestationFrequency}</p>} </div> )} {reserveDetails.isBackedAsset && !reserveDetails.isConfigured && <p className='ml-4 text-red-600'>Reserve details not configured!</p>}
-            </div>
-           {/* Navigation Buttons */}
-           <div className="flex justify-between mt-8">
-              <button className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50" onClick={() => setIssuanceScreen('proof-reserves')} > Previous Step </button>
-              <button className="px-4 py-2 rounded text-white hover:opacity-90 bg-green-600" onClick={() => { const amountToIssue = parseFloat(supplyDetails.initialSupply || 0); const fullTokenData = { tokenDetails: { ...tokenDetails }, supplyDetails: { ...supplyDetails, initialSupply: amountToIssue }, permissionDetails: { ...permissionDetails }, reserveDetails: { ...reserveDetails }, regulatoryInfo: [...regulatoryInfo] }; if (amountToIssue > 0 && fullTokenData.tokenDetails.symbol && fullTokenData.tokenDetails.name && fullTokenData.tokenDetails.blockchain && fullTokenData.tokenDetails.tokenType) { console.log("Calling onIssue with full data:", fullTokenData); onIssue(fullTokenData); } else { alert("Please ensure Name, Symbol, Blockchain, Token Type, and Initial Supply are valid."); } }}> Issue Token </button>
-            </div>
-         </div>
-     )}
+             {/* Show Summary only if workflow is idle */}
+             {workflowState === 'idle' && (
+                <>
+                    <p className="text-gray-600 mb-6">Review details below and click 'Request Issuance Approval' to proceed.</p>
+                    {/* Review Summary */}
+                    <div className='p-4 border rounded bg-gray-50 mb-6 space-y-2 text-sm'>
+                        {/* ... (Keep existing summary rendering logic here) ... */}
+                        <p><strong>Name:</strong> {tokenDetails.name || 'N/A'}</p>
+                        <p><strong>Symbol:</strong> {tokenDetails.symbol || 'N/A'}</p>
+                        {/* ... Add all other details ... */}
+                         <p><strong>Blockchain:</strong> {tokenDetails.blockchain || 'N/A'}</p> <p><strong>Token Type:</strong> {tokenDetails.tokenType || 'N/A'}</p> <p><strong>Amount to Issue:</strong> {supplyDetails.initialSupply ? parseFloat(supplyDetails.initialSupply).toLocaleString() : 'N/A'}</p> <p><strong>Value Definition:</strong> {supplyDetails.valueDefinition || 'N/A'}</p> <p><strong>Supply Type:</strong> {supplyDetails.supplyType === 'finite' ? 'Finite' : 'Infinite'}</p> <p><strong>Decimals:</strong> {supplyDetails.decimals}</p> <p><strong>KYC Enabled:</strong> {permissionDetails.kycEnabled ? 'Yes' : 'No'}</p> <p><strong>Fees Enabled:</strong> {permissionDetails.feeScheduleEnabled ? 'Yes' : 'No'}</p> <p><strong>Pausable:</strong> {permissionDetails.pausable ? 'Yes' : 'No'}</p> <p><strong>Fungible:</strong> {permissionDetails.fungible ? 'Yes' : 'No'}</p> <p><strong>Expiration:</strong> {permissionDetails.expiration || 'None'}</p>
+                        <p><strong>Roles:</strong></p> {permissionDetails.roles.length > 0 ? ( <ul className='list-disc list-inside ml-4'>{permissionDetails.roles.map((r, i) => <li key={i}>{r.role}: {r.address}</li>)}</ul> ) : ( <p className='ml-4 italic'>None specified</p> )}
+                        <p><strong>Regulatory Info:</strong></p> {regulatoryInfo.length > 0 ? ( <ul className='list-disc list-inside ml-4'>{regulatoryInfo.map((info, i) => <li key={i}>{info.country}: {info.regulator}</li>)}</ul> ) : ( <p className='ml-4 italic'>None specified</p> )}
+                        <p><strong>Asset Backed:</strong> {reserveDetails.isBackedAsset ? 'Yes' : 'No'}</p> {reserveDetails.isBackedAsset && reserveDetails.isConfigured && ( <div className='ml-4'><p><strong>Backing Type:</strong> {reserveDetails.backingType}</p> {reserveDetails.backingType === 'bank' && <p>Bank Name: {reserveDetails.bankName}, Account ending: {reserveDetails.accountNumberLast4}</p>} {reserveDetails.backingType === 'smartcontract' && <p>Network: {reserveDetails.contractNetwork}, Address: {reserveDetails.contractAddress}</p>} {reserveDetails.backingType === 'custodian' && <p>Custodian: {reserveDetails.custodianName}, Frequency: {reserveDetails.attestationFrequency}</p>} </div> )} {reserveDetails.isBackedAsset && !reserveDetails.isConfigured && <p className='ml-4 text-red-600'>Reserve details not configured!</p>}
+                    </div>
+                </>
+             )}
+
+             {/* --- Workflow Status Area (Displayed when workflow is active) --- */}
+             {workflowState !== 'idle' && (
+               <div className={`mb-6 p-4 border rounded-lg ${workflowState === 'rejected' ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'}`}>
+                 <h3 className={`text-lg font-semibold mb-2 ${workflowState === 'rejected' ? 'text-red-800' : 'text-blue-800'}`}>Issuance Request Status</h3>
+                 <p className={`mb-3 ${workflowState === 'rejected' ? 'text-red-700' : 'text-blue-700'}`}>{workflowMessage}</p>
+
+                 {isLoading && <p className="text-sm text-gray-500 italic mb-3">Processing...</p>}
+
+                 {/* Simulated Action Buttons for Workflow Steps */}
+                 {workflowState === 'pending_compliance' && !isLoading && (
+                   <div className="flex space-x-3">
+                     <button onClick={() => handleApproval('compliance')} className="px-4 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">Approve (Compliance)</button>
+                     <button onClick={() => handleReject('Compliance')} className="px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">Reject (Compliance)</button>
+                   </div>
+                 )}
+                 {workflowState === 'pending_management' && !isLoading && (
+                   <div className="flex space-x-3">
+                     <button onClick={() => handleApproval('management')} className="px-4 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">Approve (Management)</button>
+                     <button onClick={() => handleReject('Management')} className="px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">Reject (Management)</button>
+                   </div>
+                 )}
+                 {workflowState === 'rejected' && ( <p className="text-red-700 font-medium">Reason: {rejectReason}</p> )}
+                 {workflowState === 'approved' && !isLoading && (
+                    <button onClick={handleExecuteIssue} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold"> Confirm & Issue Token </button>
+                 )}
+               </div>
+             )}
+
+            {/* --- Navigation Buttons for Finalization Step --- */}
+            <div className="flex justify-between mt-8">
+               {/* Previous Button: Only show if workflow is idle */}
+               { workflowState === 'idle' ? (
+                    <button className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50" onClick={() => setIssuanceScreen('proof-reserves')} > Previous Step </button>
+               ) : (
+                   <div /> // Placeholder to keep layout consistent
+               )}
+
+               {/* Action Button: Changes based on workflow state */}
+               { workflowState === 'idle' ? (
+                    <button className="px-4 py-2 rounded text-white hover:opacity-90 bg-green-600 disabled:opacity-50"
+                            onClick={handleInitiateIssuanceApproval}
+                            disabled={reserveDetails.isBackedAsset && !reserveDetails.isConfigured}>
+                        Request Issuance Approval
+                    </button>
+                ) : (
+                    <div/> // Action buttons are inside the workflow status area now
+                )}
+             </div>
+           </div>
+        )}
+
+        {/* Fallback for unexpected state */}
+        {issuanceScreen !== 'token-details' &&
+         issuanceScreen !== 'supply-metadata' &&
+         issuanceScreen !== 'permissions' &&
+         issuanceScreen !== 'proof-reserves' &&
+         issuanceScreen !== 'finalization' && (
+            <p className="text-red-500">Error: Invalid issuance screen state.</p>
+        )}
 
       </div>
     </div>
