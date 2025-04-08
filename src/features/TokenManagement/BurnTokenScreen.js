@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * Component responsible for the token burning process. It allows users to select
- * an asset, specify an amount to burn, provide a reason, and initiate a simulated
- * multi-step approval workflow (Compliance, Treasury) before final execution.
+ * Component providing a form to mint additional units of an existing token type.
+ * Includes a simulated single-step approval workflow (Treasury) before final execution.
  *
  * @param {object} props - Component props.
- * @param {Array} props.assets - The list of existing assets (used for selection and balance checks).
- * @param {function} props.onBurn - Callback function triggered after successful workflow approval and final confirmation. It passes an object { assetId, amount, reason, notes } to the parent component (TokenDashboard) to handle the state update.
- * @param {function} props.onBack - Callback function to navigate back to the previous view (usually the dashboard).
+ * @param {Array} props.assets - The list of existing assets available for minting.
+ * @param {function} props.onBurn - Callback function executed after workflow approval and user confirmation. Passes an object { assetId, amount, reason, notes } to the parent component.
+ * @param {function} props.onBack - Callback function to navigate back to the previous view.
  */
 const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
 
@@ -16,14 +15,14 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [amountToBurn, setAmountToBurn] = useState('');
   const [burnReason, setBurnReason] = useState('');
-  const [burnNotes, setBurnNotes] = useState('');
-  const [workflowState, setWorkflowState] = useState('idle'); // 'idle', 'pending_compliance', 'pending_treasury', 'approved', 'rejected'
+  const [burnNotes, setBurnNotes] = useState(''); // State for notes textarea
+  const [workflowState, setWorkflowState] = useState('idle');
   const [workflowMessage, setWorkflowMessage] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-
   // Find the full asset object for the selected ID.
+  // Use selectedAssetId when idle, rely on data passed during workflow otherwise.
   const selectedAsset = assets.find(asset => asset.id === selectedAssetId);
 
   // Update the status message displayed based on the current workflow state.
@@ -58,19 +57,24 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
     event.preventDefault();
     const amount = parseFloat(amountToBurn);
 
-    if (!selectedAsset) { alert("Please select an asset."); return; }
+    // Find asset based on current selection for validation
+    const assetForValidation = assets.find(asset => asset.id === selectedAssetId);
+
+    if (!assetForValidation) { alert("Please select an asset."); return; } // Use validated asset object
     if (isNaN(amount) || amount <= 0) { alert("Please enter a valid positive amount."); return; }
-    if (amount > selectedAsset.balance) { alert("Amount to burn cannot exceed current balance."); return; }
+    if (amount > assetForValidation.balance) { alert("Amount to burn cannot exceed current balance."); return; }
     if (!burnReason) { alert("Please select a burn reason."); return; }
 
     setWorkflowState('pending_compliance');
   };
 
   // Simulates an approval step (Compliance or Treasury).
+  // *** CORRECTED BRACES ***
   const handleApproval = (step) => {
-     if (isLoading) return;
+     if (isLoading) return; // Correct placement of return
+
      setIsLoading(true);
-     setWorkflowMessage(`Processing ${step} approval... (Simulating delay)`);
+     setWorkflowMessage(`Processing ${step} approval...`);
 
      setTimeout(() => {
         if (step === 'compliance') {
@@ -79,40 +83,66 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
           setWorkflowState('approved');
         }
      }, 1500); // Simulate 1.5 second delay
-  };
+  }; // Correct closing brace for handleApproval
 
   // Simulates a rejection step, prompting for a reason.
   const handleReject = (rejectedBy) => {
     if (isLoading) return;
     const reason = prompt(`Enter reason for rejection by ${rejectedBy} (optional):`);
     setIsLoading(true);
-    setWorkflowMessage(`Processing rejection... (Simulating delay)`);
+    setWorkflowMessage(`Processing rejection...`);
 
      setTimeout(() => {
         setRejectReason(reason || 'No reason provided.');
         setWorkflowState('rejected');
      }, 1000); // Simulate 1 second delay
-  };
+  }; // Correct closing brace for handleReject
 
   // Handles the final execution of the burn after workflow approval and user confirmation.
+  // *** CORRECTED STRUCTURE - NO NESTED FUNCTION ***
   const handleExecuteBurn = () => {
-    if (isLoading) return;
-    const amount = parseFloat(amountToBurn);
-    const confirmMsg = `You are about to permanently burn ${amount.toLocaleString()} ${selectedAsset?.symbol}. This cannot be undone.\n\nProceed?`;
+    // Check workflow state and loading status
+    if (isLoading || workflowState !== 'approved') return;
+
+    // Re-find selected asset based on ID stored when initiating
+    // (selectedAssetId should still hold the correct ID from the form)
+    const assetToBurn = assets.find(asset => asset.id === selectedAssetId);
+    const amount = parseFloat(amountToBurn); // Get amount from state
+
+    if (!assetToBurn || isNaN(amount)) {
+        alert("Error: Could not retrieve burn details. Please cancel and try again.");
+        setWorkflowState('idle'); // Reset state on error
+        return;
+    }
+
+    const confirmMsg = `You are about to permanently burn ${amount.toLocaleString()} ${assetToBurn.symbol}. This cannot be undone.\n\nProceed?`;
 
     if (window.confirm(confirmMsg)) {
-        onBurn({ // Calls the callback passed from the parent
+        const dataToSend = { // Create object with current state data
             assetId: selectedAssetId,
             amount: amount,
             reason: burnReason,
-            notes: burnNotes
-        });
+            notes: burnNotes // Include notes from state
+        };
+        console.log('BurnScreen: Data being sent via onBurn:', dataToSend); // Log the data
+        onBurn(dataToSend); // Call the onBurn callback ONCE with the data object
+        // Parent component (TokenDashboard) will handle navigation on success
     } else {
         console.log("Final burn execution cancelled by user.");
+        // Optionally reset workflow if user cancels final confirm?
+        // setWorkflowState('idle');
     }
-  };
+  }; // Correct closing brace for handleExecuteBurn
 
-  // --- Render Logic ---
+   /** Handles cancelling the active workflow request */
+   const handleCancelRequest = () => {
+      if (window.confirm("Are you sure you want to cancel this burn request?")) {
+          setWorkflowState('idle'); // Reset workflow, keeps form data
+      }
+  }; // Correct closing brace for handleCancelRequest
+
+
+  // --- Render Logic --- *** THIS MUST BE AFTER ALL HANDLERS ***
   return (
     <div className="p-8">
       <div className="bg-white p-6 rounded shadow max-w-3xl mx-auto">
@@ -121,14 +151,15 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
           <h1 className="text-2xl font-bold text-gray-800">Burn Tokens</h1>
           <button
             className="px-3 py-1 rounded text-white hover:opacity-90 bg-gray-800 text-sm disabled:opacity-50"
-            onClick={workflowState === 'idle' || workflowState === 'rejected' ? onBack : () => { setWorkflowState('idle'); }}
-            disabled={isLoading}
+            // *** CORRECTED onClick LOGIC ***
+            onClick={workflowState === 'idle' || workflowState === 'rejected' ? onBack : handleCancelRequest}
+            disabled={isLoading} // Simpler disabled check
           >
             {workflowState === 'idle' || workflowState === 'rejected' ? 'Back to Dashboard' : 'Cancel Burn Request'}
           </button>
         </div>
 
-        {/* Workflow Status Area (Displayed when workflow is active) */}
+        {/* Workflow Status Area */}
         {workflowState !== 'idle' && (
           <div className={`mb-6 p-4 border rounded-lg ${workflowState === 'rejected' ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'}`}>
             <h3 className={`text-lg font-semibold mb-2 ${workflowState === 'rejected' ? 'text-red-800' : 'text-blue-800'}`}>Burn Request Status</h3>
@@ -136,7 +167,7 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
 
             {isLoading && <p className="text-sm text-gray-500 italic mb-3">Processing...</p>}
 
-            {/* Simulated Action Buttons for Workflow Steps */}
+            {/* Action Buttons */}
             {workflowState === 'pending_compliance' && !isLoading && (
               <div className="flex space-x-3">
                 <button onClick={() => handleApproval('compliance')} className="px-4 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">Approve (Compliance)</button>
@@ -149,24 +180,23 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
                 <button onClick={() => handleReject('Treasury Department')} className="px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">Reject (Treasury)</button>
               </div>
             )}
-             {workflowState === 'rejected' && ( <p className="text-red-700 font-medium">Reason: {rejectReason}</p> )}
+             {workflowState === 'rejected' && !isLoading && ( <p className="text-red-700 font-medium">Reason: {rejectReason}</p> )}
              {workflowState === 'approved' && !isLoading && (
                 <button onClick={handleExecuteBurn} className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 font-bold"> Execute Irreversible Burn Now </button>
              )}
           </div>
         )}
 
-        {/* Main Burn Form (Displayed only when workflow is idle) */}
+        {/* Main Burn Form */}
         {workflowState === 'idle' && (
           <>
             {/* Warning Banner */}
             <div className="bg-yellow-50 border-l-4 border-yellow-600 p-4 mb-6">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-yellow-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                </div>
+              {/* ... banner content ... */}
+               <div className="flex">
+                <div className="flex-shrink-0"> <svg className="h-5 w-5 text-yellow-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg> </div>
                 <div className="ml-3"><p className="text-sm text-yellow-700"><strong>Warning:</strong> Burning tokens is irreversible.</p></div>
-              </div>
+               </div>
             </div>
 
             {/* Form */}
@@ -177,6 +207,7 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
                   <label htmlFor="burnAssetSelect" className="block mb-1 font-medium text-gray-700">Select Token to Burn <span className="text-red-600">*</span></label>
                   <select id="burnAssetSelect" className="w-full p-2 border rounded bg-white" value={selectedAssetId} onChange={(e) => setSelectedAssetId(e.target.value)} required >
                     <option value="" disabled>-- Select an Asset --</option>
+                    {/* Filter out assets with 0 balance? Optional */}
                     {assets.map(asset => ( <option key={asset.id} value={asset.id}>{asset.label} ({asset.symbol})</option> ))}
                   </select>
                 </div>
@@ -224,7 +255,8 @@ const BurnTokenScreen = ({ assets = [], onBurn, onBack }) => {
         )}
       </div>
     </div>
-  );
-};
+  ); // <<< End of return statement
 
-export default BurnTokenScreen;
+}; // <<< *** THIS IS THE CORRECT FINAL BRACE FOR THE COMPONENT ***
+
+export default BurnTokenScreen; // This should be the very last line

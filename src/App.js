@@ -1,46 +1,79 @@
 import React, { useState } from 'react';
-import Layout from './components/Layout/Layout'; // Import the Layout component
-import TokenDashboard from './features/TokenManagement/TokenDashboard'; // <-- ADDED THIS IMPORT
+import Layout from './components/Layout/Layout';
+import TokenDashboard from './features/TokenManagement/TokenDashboard';
+import PaymentsDashboard from './features/Payments/PaymentsDashboard';
+
+// --- Shared Data Definitions ---
+const initialAssets = [
+  { id: 'usdc', label: 'USDC', balance: 10000000, symbol: 'USDC', description: 'Manage USDC stablecoin reserves.', supply: 'Finite', blockchain: 'Stellar', isWizardIssued: false },
+  { id: 'usdt', label: 'USDT', balance: 8500000, symbol: 'USDT', description: 'Manage USDT stablecoin reserves.', supply: 'Finite', blockchain: 'Ethereum', isWizardIssued: false },
+  { id: 't-gold', label: 'Tokenized Gold', balance: 5000, symbol: 'T-GOLD', description: 'Manage reserves for Gold-backed tokens.', supply: 'Finite', blockchain: 'Polygon', isWizardIssued: false },
+  { id: 'e-cedi', label: 'eCedi', balance: 15000000, symbol: 'eGH¢', description: 'Manage reserves for eCedi CBDC.', supply: 'Finite', blockchain: 'Hedera', isWizardIssued: false },
+  { id: 'd-euro', label: 'Digital Euro', balance: 9000000, symbol: 'D-EUR', description: 'Manage reserves for Digital Euro.', supply: 'Finite', blockchain: 'Ethereum', isWizardIssued: false }
+];
+
+const assetLogos = {
+  'usdc': '/logos/circle.png',
+  'usdt': '/logos/tether.svg',
+  't-gold': '/logos/bog.png',
+  'e-cedi': '/logos/bog.png',
+  'd-euro': '/logos/ecb.png',
+};
+const blockchainLogos = {
+  'Stellar': '/logos/stellar.png',
+  'Ethereum': '/logos/ethereum.png',
+  'Polygon': '/logos/polygon.png',
+  'Hedera': '/logos/hedera.png',
+  'Solana': '/logos/solana.png',
+};
+// --- End Shared Data ---
+
 
 function App() {
-  // Bring the activeTab state here, as Layout needs it
-  const [activeTab, setActiveTab] = useState('token-mgmt'); // Default to token-mgmt
+  // --- State Managed by App ---
+  const [activeTab, setActiveTab] = useState('token-mgmt'); // Default tab
+  const [assets, setAssets] = useState(initialAssets); // Shared assets state
+  // --- End State ---
 
   // Function to render content based on activeTab
   const renderContent = () => {
     switch (activeTab) {
       case 'token-mgmt':
-        // Render the actual TokenDashboard component now
-        return <TokenDashboard />; // <-- CHANGED THIS LINE
+        // TokenDashboard receives assets state and updater
+        return (
+          <TokenDashboard
+            assets={assets}
+            setAssets={setAssets} // Pass updater
+            assetLogos={assetLogos}
+            blockchainLogos={blockchainLogos}
+          />
+        );
 
-      case 'account-mgmt': // Separate case for account-mgmt
-        // Later, this will render the AccountManagementDashboard component
-        return <div className="p-8"><h1 className="text-2xl">Account Management Content Area</h1><p>Details for {activeTab} will go here.</p></div>;
+      case 'payments':
+        // PaymentsDashboard receives assets state and the updater
+        return (
+          <PaymentsDashboard
+            assets={assets}
+            setAssets={setAssets} // <-- ADDED THIS PROP
+            assetLogosMap={assetLogos}
+          />
+        );
 
-      case 'payments': // Separate case for payments
-         // Later, this will render the PaymentsDashboard component
-        return <div className="p-8"><h1 className="text-2xl">Payments Content Area</h1><p>Details for {activeTab} will go here.</p></div>;
-
+      // --- Other placeholders ---
+      case 'account-mgmt':
+        return <div className="p-8"><h1 className="text-2xl">Account Management</h1><p>Placeholder...</p></div>;
       case 'custody':
-         // Later, this will render the CustodyDashboard component
-        return <div className="p-8"><h1 className="text-2xl">Custody Content Area</h1><p>Details for {activeTab} will go here.</p></div>;
-
+        return <div className="p-8"><h1 className="text-2xl">Custody</h1><p>Placeholder...</p></div>;
       case 'treasury':
-         // Later, this will render the TreasuryDashboard component
-        return <div className="p-8"><h1 className="text-2xl">Treasury Content Area</h1><p>Details for {activeTab} will go here.</p></div>;
-
+        return <div className="p-8"><h1 className="text-2xl">Treasury Management</h1><p>Placeholder...</p></div>;
       case 'compliance':
-         // Later, this will render the ComplianceDashboard component
-        return <div className="p-8"><h1 className="text-2xl">Compliance Content Area</h1><p>Details for {activeTab} will go here.</p></div>;
-
+        return <div className="p-8"><h1 className="text-2xl">Compliance</h1><p>Placeholder...</p></div>;
       default:
         return <div className="p-8"><h1 className="text-2xl">Dashboard</h1></div>;
     }
   };
 
   return (
-    // Pass the state and setter down to the Layout
-    // Render the content determined by renderContent() inside the Layout
     <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
       {renderContent()}
     </Layout>

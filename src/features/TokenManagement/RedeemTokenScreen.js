@@ -134,7 +134,7 @@ const RedeemTokenScreen = ({ assets = [], onRedeem, onBack }) => {
   const handleApproval = (step) => {
      if (isLoading) return;
      setIsLoading(true);
-     setWorkflowMessage(`Processing Step ${step} approval... (Simulating delay)`);
+     setWorkflowMessage(`Processing Step ${step} approval...`);
      setTimeout(() => {
         if (step === 1) { setWorkflowState('pending_auth2'); }
         else if (step === 2) { setWorkflowState('approved'); }
@@ -146,7 +146,7 @@ const RedeemTokenScreen = ({ assets = [], onRedeem, onBack }) => {
     if (isLoading) return;
     const reason = prompt(`Enter reason for rejection at Step ${rejectedByStep} (optional):`);
     setIsLoading(true);
-    setWorkflowMessage(`Processing rejection... (Simulating delay)`);
+    setWorkflowMessage(`Processing rejection...`);
      setTimeout(() => {
         setRejectReason(reason || 'No reason provided.');
         setWorkflowState('rejected');

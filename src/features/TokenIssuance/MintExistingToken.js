@@ -92,7 +92,7 @@ const MintExistingToken = ({ assets = [], onMint, onBack }) => {
   const handleApproval = () => {
      if (isLoading) return;
      setIsLoading(true);
-     setWorkflowMessage(`Processing Treasury approval... (Simulating delay)`);
+     setWorkflowMessage(`Processing Treasury approval...`);
 
      setTimeout(() => {
         setWorkflowState('approved');
@@ -104,7 +104,7 @@ const MintExistingToken = ({ assets = [], onMint, onBack }) => {
     if (isLoading) return;
     const reason = prompt(`Enter reason for rejection by Treasury (optional):`);
     setIsLoading(true);
-    setWorkflowMessage(`Processing rejection... (Simulating delay)`);
+    setWorkflowMessage(`Processing rejection...`);
 
      setTimeout(() => {
         setRejectReason(reason || 'No reason provided.');

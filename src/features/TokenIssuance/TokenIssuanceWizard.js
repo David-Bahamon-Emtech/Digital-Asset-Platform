@@ -146,7 +146,7 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
   const handleApproval = (step) => {
     if (isLoading) return;
     setIsLoading(true);
-    setWorkflowMessage(`Processing ${step} approval... (Simulating delay)`);
+    setWorkflowMessage(`Processing ${step} approval...`);
 
     setTimeout(() => {
       if (step === 'compliance') {
@@ -162,7 +162,7 @@ const TokenIssuanceWizard = ({ onBack, onIssue }) => {
     if (isLoading) return;
     const reason = prompt(`Enter reason for rejection by ${rejectedBy} (optional):`);
     setIsLoading(true);
-    setWorkflowMessage(`Processing rejection... (Simulating delay)`);
+    setWorkflowMessage(`Processing rejection...`);
 
     setTimeout(() => {
       setRejectReason(reason || 'No reason provided.');

@@ -122,7 +122,7 @@ const AssetDetailView = ({
     const handlePauseApproval = () => {
         if (pauseIsLoading) return;
         setPauseIsLoading(true);
-        setPauseWorkflowMessage(`Processing Pauser Role approval... (Simulating delay)`);
+        setPauseWorkflowMessage(`Processing Pauser Role approval...`);
 
         setTimeout(() => {
             setPauseWorkflowState('approved');
@@ -134,7 +134,7 @@ const AssetDetailView = ({
         if (pauseIsLoading) return;
         const reason = prompt(`Enter reason for rejection by Pauser Role (optional):`);
         setPauseIsLoading(true);
-        setPauseWorkflowMessage(`Processing rejection... (Simulating delay)`);
+        setPauseWorkflowMessage(`Processing rejection...`);
 
         setTimeout(() => {
             setPauseRejectReason(reason || 'No reason provided.');

@@ -1,49 +1,69 @@
-# Digital-Asset-Platform V 0.2
+# Digital-Asset-Platform V 0.3
 
-A React-based front-end demonstration for managing digital assets, showcasing token issuance, minting, burning, redeeming, reserve viewing, and overview functionalities. Built using React and Tailwind CSS.
+A React-based front-end demonstration for managing digital assets and simulating payment flows. Showcases token issuance, minting, burning, redeeming, reserve viewing, cross-border payments, HVT/bulk payment overviews, and related functionalities. Built using React and Tailwind CSS.
 
-**Note:** This is currently a self-contained front-end demo. All data (initial assets, balances, newly issued tokens) is managed in the application's state and is **not persistent**; refreshing the browser or restarting the server will reset the state to the initial defaults. No backend APIs are connected.
+**Note:** This is currently a self-contained front-end demo. All data (initial assets, balances, newly issued tokens, payment/template/recurring data) is managed in the application's state or hardcoded and is **not persistent**; refreshing the browser or restarting the server will reset the state to the initial defaults. No backend APIs are connected.
 
 ## Key Features (Current)
 
-* **Dashboard Overview (`TokenDashboard.js`):**
-    * Displays a grid of managed digital assets (e.g., USDC, USDT, user-created tokens).
-    * Each asset card shows key details: Label, Description, Supply Type, Current Balance, Blockchain.
-    * Includes logos for specific assets and blockchains. Displays a generic logo for user-created tokens.
-    * Provides functional action cards for navigating to Issue/Mint, Burn, Redeem, and Reserve Management screens.
+* **Token Management (`src/features/TokenManagement`)**
+    * **Dashboard Overview (`TokenDashboard.js`):**
+        * Displays a grid of managed digital assets (e.g., USDC, USDT, user-created tokens).
+        * Each asset card shows key details and logo. Includes generic logo for user-created tokens.
+        * Provides functional action cards for navigating to Issue/Mint, Burn, Redeem, and Reserve Management screens.
+        * Displays a filterable transaction history log with clickable rows for detail modal.
+    * **Clickable Asset Cards:** Leads to a detailed view.
+    * **Asset Detail View (`AssetDetailView.js`):** Provides expanded view of selected asset (official info for predefined, wizard config for user-issued). Includes simulated pause/unpause workflow.
+    * **Token Lifecycle Workflows:**
+        * **Issuance Choice Screen (`IssuanceChoiceScreen.js`):** Choice between issuing new or minting existing tokens.
+        * **New Token Issuance Wizard (`TokenIssuanceWizard.js`):** Multi-step wizard (Details, Supply, Permissions, Reserves, Finalization) with simulated approval workflow.
+        * **Mint Existing Token (`MintExistingToken.js`):** Form to select and mint more of an existing token with simulated approval.
+        * **Burn Token (`BurnTokenScreen.js`):** Form to select and burn tokens with simulated multi-step approval.
+        * **Redeem Token (`RedeemTokenScreen.js`):** Form to redeem tokens for underlying value or swap for other platform tokens (using simulated rates). Includes simulated multi-step approval.
+    * **Reserve Management (`ReserveManagementScreen.js`):** Displays simulated reserve data (Circulation, Ratio, Composition, Accounts) for selected assets. Generates fallback data for user-issued tokens. Allows configuring simulated reserve alerts and downloading simulated reports. Includes modals for all accounts and alert configuration.
+    * **History Detail Modal (`HistoryDetailModal.js`):** Displays details of a selected history log entry, including any associated notes.
 
-* **Clickable Asset Cards:**
-    * Dashboard cards are interactive, leading to a detailed view upon clicking.
+* **Payments (`src/features/Payments`)**
+    * **Main Dashboard (`PaymentsDashboard.js`):**
+        * Acts as the central hub for the Payments feature.
+        * Provides tabs to navigate between Cross-Border, High-Value Transfers, and Bulk Payments views.
+        * Manages the active payment screen state.
+        * Handles simulated payment submission logic (e.g., updating asset balances).
+    * **Cross-Border Payments View (`CrossBorderDashboardView.js`):**
+        * Displays action cards (New Payment, Templates, Recurring).
+        * Shows simulated transaction metrics and a recent transactions table for cross-border activity.
+    * **Create Payment Screen (`CreatePaymentScreen.js`):**
+        * Multi-step form (Details, Review, Confirm) for initiating cross-border style payments (Tokenized, SWIFT, Internal types).
+        * Uses controlled inputs linked to component state.
+        * Dynamically populates sender accounts/wallets from managed assets and derives currency.
+        * Includes balance checks against selected sending account.
+        * Calculates and displays a dynamic preview of amounts and simulated fees.
+        * Simulates payment submission by updating sender asset balance.
+    * **High-Value Transfers View (`HighValueDashboardView.js`):**
+        * Displays action cards (Initiate HVT, Review Pending, History).
+        * Shows simulated metrics and a recent HVT table.
+        * Provides navigation to HVT creation and authorization screens (placeholders).
+    * **Bulk Payments View (`BulkDashboardView.js`):**
+        * Displays summary stats for bulk processing.
+        * Provides action cards (Upload File, Create Template).
+        * Shows a table of active/recent bulk files and other stats (static data).
+        * Provides navigation to bulk upload/template creation screens (placeholders).
+    * **View Templates Screen (`ViewTemplatesScreen.js`):**
+        * Displays a grid of simulated payment templates.
+        * Includes working search and filter controls (Type, Recipient) acting on static data.
+        * Action buttons (Use, Edit, Delete, Create) have placeholder handlers.
+    * **Manage Recurring Payments Screen (`ManageRecurringPaymentsScreen.js`):**
+        * Displays a table/list of simulated recurring payments.
+        * Includes working status filters and search input acting on static data.
+        * Includes a non-functional List/Calendar view toggle.
+        * Action buttons (Setup New, Edit, Pause/Play, Delete) have placeholder handlers.
+    * **Authorize HVT Screen (`AuthorizeHVTScreen.js`):**
+        * Displays a queue of simulated pending High-Value Transfers requiring authorization.
+        * Includes working status filters and search input acting on static data.
+        * Implements UI for selecting single or multiple transfers for batch actions.
+        * Action buttons (Authorize, Reject, View Details, Batch actions) have placeholder handlers.
 
-* **Asset Detail View (`AssetDetailView.js`):**
-    * Provides an expanded view of a selected asset.
-    * Displays hardcoded "official" information for pre-defined assets.
-    * Displays the full configuration details captured during the issuance process for user-created tokens (including reserve backing details).
-    * Includes relevant asset and blockchain logos.
-
-* **Token Lifecycle Workflows:**
-    * **Issuance Choice Screen (`IssuanceChoiceScreen.js`):** Allows users to select between issuing a brand new token or minting more of an existing one.
-    * **New Token Issuance Wizard (`TokenIssuanceWizard.js`):** Guides the user through defining a new token via distinct steps (Token Details, Supply & Metadata, Permissions, Proof of Reserves, Finalization). Collects a `valueDefinition` (e.g., "1 USDC") used for simulated swap rates.
-    * **Mint Existing Token (`MintExistingToken.js`):** Provides a form to select an existing token, specify an amount and optional reason, confirm details, and increase its balance (mint).
-    * **Burn Token (`BurnTokenScreen.js`):** Provides a form to select a token, specify an amount and reason to burn (permanently decrease supply). Includes a simulated multi-step (Compliance, Treasury) approval workflow before final execution.
-    * **Redeem Token (`RedeemTokenScreen.js`):** Provides a form to select a token and amount to redeem. Allows choosing between:
-        * Redeeming for the implicit underlying asset.
-        * Swapping for another token available on the platform (using simulated exchange rates derived from issuance definitions or base values).
-        * Includes fields for receiving account, purpose, and terms acknowledgement.
-        * Displays an estimated preview of the redemption/swap.
-        * Includes a simulated multi-step (2-Factor Auth) approval workflow before final execution.
-
-* **Reserve Management (`ReserveManagementScreen.js`):**
-    * Allows selecting different assets (including user-issued) via tabs with logos.
-    * Displays simulated reserve data for the selected asset (Circulation, Ratio, Composition, Accounts list).
-    * Generates fallback reserve data for user-issued tokens based on their current balance and issuance configuration.
-    * Conditionally displays reserve backing attestation details captured during the issuance process for user-issued tokens.
-    * Provides buttons to generate and download simulated CSV reports (Attestation, Historical).
-    * Includes a modal ("View All Accounts") to display a larger list of simulated reserve accounts.
-    * Includes a modal ("Configure Reserve Alerts") to set a simulated reserve ratio threshold for the selected asset.
-    * Displays a visual alert if the simulated reserve ratio falls below the configured threshold.
-
-* **Component Structure:** Organized using `src/components` for reusable UI elements (Layout, Sidebar) and `src/features` for feature-specific modules (TokenManagement, TokenIssuance).
+* **Component Structure:** Organized using `src/components` for reusable UI elements (Layout, Sidebar) and `src/features` for feature-specific modules (TokenManagement, Payments).
 
 ## Getting Started
 
