@@ -134,7 +134,7 @@ const ViewTemplatesScreen = ({
   return (
     <div className="bg-white p-6 rounded shadow max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6 border-b pb-3">
-        <h1 className="text-2xl font-bold text-gray-800">Payment Templates (Rebuilt - Local Data)</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Payment Templates </h1>
         <button className="px-3 py-1 rounded text-white hover:opacity-90 bg-gray-800 text-sm" onClick={onBack} > Back to Dashboard </button>
       </div>
 

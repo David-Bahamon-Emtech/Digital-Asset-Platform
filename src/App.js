@@ -3,47 +3,53 @@ import React, { useState } from 'react';
 import Layout from './components/Layout/Layout';
 import TokenDashboard from './features/TokenManagement/TokenDashboard';
 import PaymentsDashboard from './features/Payments/PaymentsDashboard';
-
-// --- Import centralized data and utilities ---
 import { generateDummyClientAccounts } from './utils/dummyData';
 import {
     initialInstitutionalAssets,
     assetLogos,
     blockchainLogos
 } from './data/initialData';
+import { initialPaymentHistory } from './features/Payments/data/paymentConstants'; // Import lifted state's initial value
 
-// --- Generate client accounts using the imported function ---
 const initialClientAccounts = generateDummyClientAccounts(30);
 
-// --- Combine lists for initial state using imported data ---
 const combinedInitialAccounts = [
     ...initialInstitutionalAssets,
     ...initialClientAccounts
 ];
 
 function App() {
-  // --- State Managed by App ---
   const [activeTab, setActiveTab] = useState('token-mgmt');
   const [allAccounts, setAllAccounts] = useState(combinedInitialAccounts);
-  // --- End State ---
+  const [paymentHistory, setPaymentHistory] = useState(initialPaymentHistory); // History state lifted here
 
-  // Function to render content based on activeTab
+  const handleAddPaymentHistoryEntry = (newEntry) => {
+    setPaymentHistory(prev =>
+      [newEntry, ...prev].sort((a, b) => b.timestamp - a.timestamp)
+    );
+  };
+
+  const handleUpdatePaymentHistoryStatus = (entryId, newStatus, newTimestamp) => {
+    setPaymentHistory(prev =>
+      prev.map(item =>
+        item.id === entryId
+          ? { ...item, status: newStatus, timestamp: newTimestamp || new Date() }
+          : item
+      ).sort((a, b) => b.timestamp - a.timestamp)
+    );
+  };
+
   const renderContent = () => {
-
-    // --- UPDATED FILTER LOGIC for Token Management ---
     const tokenManagementAssets = allAccounts.filter(acc =>
-        // Include institutional assets ONLY if they have a blockchain specified (are tokens)
         (acc.isInstitutional && acc.blockchain && acc.blockchain !== 'N/A') ||
-        // OR include any asset issued by the wizard
         acc.isWizardIssued
     );
-    // --- END UPDATED FILTER ---
 
     switch (activeTab) {
       case 'token-mgmt':
         return (
           <TokenDashboard
-            assets={tokenManagementAssets} // Pass the *new* filtered list
+            assets={tokenManagementAssets}
             setAssets={setAllAccounts}
             assetLogos={assetLogos}
             blockchainLogos={blockchainLogos}
@@ -51,16 +57,17 @@ function App() {
         );
 
       case 'payments':
-        // Payments still receives ALL accounts
         return (
           <PaymentsDashboard
             assets={allAccounts}
             setAssets={setAllAccounts}
             assetLogosMap={assetLogos}
+            paymentHistory={paymentHistory} // Pass state down
+            onAddHistoryEntry={handleAddPaymentHistoryEntry} // Pass handler down
+            onUpdateHistoryStatus={handleUpdatePaymentHistoryStatus} // Pass handler down
           />
         );
 
-      // --- Other placeholders --- (Unchanged)
       case 'account-mgmt': return <div className="p-8"><h1 className="text-2xl">Account Management</h1><p>Placeholder...</p></div>;
       case 'custody': return <div className="p-8"><h1 className="text-2xl">Custody</h1><p>Placeholder...</p></div>;
       case 'treasury': return <div className="p-8"><h1 className="text-2xl">Treasury Management</h1><p>Placeholder...</p></div>;

@@ -77,20 +77,32 @@ A React-based front-end demonstration platform for managing digital assets and s
     * **Upload Bulk File Screen (`UploadBulkFileScreen.js`):**
         * Simulates upload UI/workflow. Receives `assets`. Calls `onBulkSubmit` prop (now implemented in parent to log history).
     * **View Templates Screen (`ViewTemplatesScreen.js`):**
-        * **No longer manages local template list.** Receives `templates` list via props from `PaymentsDashboard`.
+    * **Manages its own template list locally** using `useState` (`localTemplates`), initialized with its own dummy data. **Does not use centralized state/handlers from`PaymentsDashboard` for create/edit/delete.** (Deviation from original V0.5 plan).
         * Handles local search/filter state.
-        * Create/Edit actions trigger `CreateEditTemplateModal`. Save action calls `onSaveTemplate` callback prop.
-        * Delete action calls `onDeleteTemplate` callback prop.
-        * "Use Template" action uses `onNavigate` prop.
+        * Create/Edit actions trigger `CreateEditTemplateModal`. Save action calls `handleModalSave` which updates *local* state.
+        * Delete action calls `handleDeleteClick` which updates *local* state after confirmation.
+        *  "Use Template" action uses the `onNavigate` prop (passed from `PaymentsDashboard`) to send selected template data to `CreatePaymentScreen`.
+        * Receives `assets` prop for use within the modal.
     * **Modal: `CreateEditTemplateModal.js`:**
         * Modal form for creating/editing templates. Receives `template` data for editing.
         * Uses props `onClose` and `onSave` (calls parent's `handleSaveTemplate`). Uses shared `renderError` and constants.
     * **Manage Recurring Payments Screen (`ManageRecurringPaymentsScreen.js`):**
-        * **No longer manages local recurring list.** Receives `recurringPayments` list via props from `PaymentsDashboard`.
-        * Handles local search/filter/view mode state.
-        * Pause/Play/Delete buttons call callback props (`onToggleRecurringStatus`, `onDeleteRecurring`).
-        * Setup New/Edit buttons call placeholder callback props (`onSetupNewRecurring`, `onEditRecurring`).
-        * Displays a dynamic "Upcoming Schedule" based on prop data.
+        * Receives `recurringPayments` list via props from `PaymentsDashboard`.
+        * Receives callbacks `onToggleRecurringStatus`, `onDeleteRecurring`, `onEditRecurring`, `onSetupNewRecurring` from `PaymentsDashboard`.
+        * Handles local state for search (`searchTerm`), status filter (`statusFilter`), and view mode (`viewMode`: 'list' or 'calendar').
+        * Provides toggle buttons to switch between List and Calendar views.
+        * **List View:** Displays filtered list (`filteredListPayments`) of recurring payments with details and action buttons (Pause/Play/Edit/Delete) which trigger callbacks.
+        * **Calendar View:**
+           * Calculates `upcomingOccurrences` using `useMemo` and `date-fns`, determining all occurrences of active, filtered payments within a defined future timeframe (e.g., 30 days) based on their `nextDate` and `frequency`.
+           * Transforms `upcomingOccurrences` into `calendarEvents` format for `react-big-calendar`.
+           * Renders a visual calendar using `react-big-calendar`, displaying the calculated `calendarEvents`.
+           * Implements a **custom toolbar** with state (`calendarView`, `calendarDate`) and handlers (`MapsToPrev`, `MapsToNext`, `MapsToToday`, `changeCalendarView`) to control calendar navigation and view, passing necessary props (`view`, `date`, `onNavigate`, `onView`) to the controlled `<Calendar>` component and hiding the default toolbar.
+   * **Modal: `RecurringPaymentModal.js`:**
+    * Modal form for creating or editing recurring payment definitions.
+    * Receives props: `isOpen`, `onClose`, `onSave` (callback to `PaymentsDashboard`), `recurringPaymentData` (data for editing, or null for create), `assets` (for 'From Account' dropdown).
+    * Contains form fields for name, source account, recipient details, amount, currency, frequency, start date, etc.
+    * Manages internal form state and performs basic validation.
+    * Calls the `onSave` prop with the form data when the save button is clicked and validation passes.
     * **Payment History Modal (`PaymentHistoryDetailModal.js`):**
         * Displays details of a selected history entry. Receives `entry` prop. Uses `onClose` prop. Uses shared `getStatusClass`.
 
