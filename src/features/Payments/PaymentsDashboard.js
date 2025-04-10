@@ -1,5 +1,5 @@
 // src/features/Payments/PaymentsDashboard.js
-import React, { useState, useMemo } from 'react'; // Added useMemo
+import React, { useState, useMemo } from 'react';
 
 // Import screen components
 import CrossBorderDashboardView from './CrossBorderDashboardView';
@@ -13,12 +13,12 @@ import CreateHighValueTransferScreen from './CreateHighValueTransferScreen';
 import UploadBulkFileScreen from './UploadBulkFileScreen';
 import ViewTransferDetailsScreen from './ViewTransferDetailsScreen';
 import PaymentHistoryDetailModal from './PaymentHistoryDetailModal';
-import PaymentHistoryTable from './PaymentHistoryTable'; // <-- IMPORT reusable table
+import PaymentHistoryTable from './PaymentHistoryTable';
 
 // Import HVT data
 import { initialDummyHVTs } from './AuthorizeHVTScreen';
 
-// --- Add More Initial Dummy History Data ---
+// Initial Dummy History Data (Unchanged)
 const initialPaymentHistory = [
     { id: 'ph1', timestamp: new Date(Date.now() - 2 * 60 * 1000), type: 'Cross-Border', amount: 1500, currency: 'USDC', recipient: 'External Vendor A', status: 'Completed', reference: 'INV-123' },
     { id: 'ph2', timestamp: new Date(Date.now() - 5 * 60 * 1000), type: 'HVT', amount: 5000000, currency: 'USD', recipient: 'Bank of Example', status: 'Pending Approval', reference: 'HVT-PEND01' },
@@ -35,12 +35,12 @@ const PaymentsDashboard = ({ assets = [], setAssets, assetLogosMap = {} }) => {
 
   const [paymentScreen, setPaymentScreen] = useState('cross-border-dash');
   const [viewingTransferDetails, setViewingTransferDetails] = useState(null);
-  const [paymentHistory, setPaymentHistory] = useState(initialPaymentHistory); // Use initial data
+  const [paymentHistory, setPaymentHistory] = useState(initialPaymentHistory);
   const [isPaymentHistoryModalOpen, setIsPaymentHistoryModalOpen] = useState(false);
   const [selectedPaymentHistoryEntry, setSelectedPaymentHistoryEntry] = useState(null);
 
-  // --- History Function ---
-  const addPaymentHistoryEntry = (entryData) => { /* ... (function unchanged) ... */
+  // History Function (Unchanged)
+  const addPaymentHistoryEntry = (entryData) => { /* ... */
     const newEntry = {
       id: Date.now() + Math.random(), timestamp: new Date(), type: entryData.type || 'Payment',
       amount: entryData.amount || 0, currency: entryData.currency || 'N/A',
@@ -49,80 +49,117 @@ const PaymentsDashboard = ({ assets = [], setAssets, assetLogosMap = {} }) => {
     };
     console.log("Adding to Payment History:", newEntry);
     setPaymentHistory(prevLog => [newEntry, ...prevLog]);
-  };
+   };
 
-  // --- Navigation Handlers ---
-  const handleNavigate = (screen, data = null) => { /* ... (function unchanged) ... */
+  // Navigation Handlers (Unchanged)
+  const handleNavigate = (screen, data = null) => { /* ... */
      console.log('Navigating to payment screen:', screen, 'Data:', data);
      if (screen === 'view-transfer-details' && data?.transferId) {
        const transfer = initialDummyHVTs.find(hvt => hvt.id === data.transferId);
        if (transfer) { setViewingTransferDetails(transfer); setPaymentScreen(screen); }
        else { alert(`Error: Could not find details...`); }
      } else { setViewingTransferDetails(null); setPaymentScreen(screen); }
-  };
-  const handleBackToPaymentsDash = (defaultScreen = 'cross-border-dash') => { /* ... (function unchanged) ... */
+   };
+  const handleBackToPaymentsDash = (defaultScreen = 'cross-border-dash') => { /* ... */
     setViewingTransferDetails(null); setPaymentScreen(defaultScreen);
-  };
-  const handlePaymentHistoryRowClick = (entry) => { /* ... (function unchanged) ... */
+   };
+  const handlePaymentHistoryRowClick = (entry) => { /* ... */
     setSelectedPaymentHistoryEntry(entry); setIsPaymentHistoryModalOpen(true);
-  };
+   };
 
-  // --- Payment Submission Handler (Unchanged from last version) ---
-  const handlePaymentSubmit = (paymentData) => { /* ... (function unchanged - still calls addPaymentHistoryEntry) ... */
+  // --- MODIFIED Payment Submission Handler ---
+  const handlePaymentSubmit = (paymentData) => {
     console.log('Payment Submitted in Dashboard:', paymentData);
     let updateError = false;
-    setAssets(currentAssets => { /* ... balance update logic ... */
-        const senderAssetIndex = currentAssets.findIndex( asset => asset.id === paymentData.senderAccountId );
-        if (senderAssetIndex === -1) { updateError = true; return currentAssets; }
-        const senderAsset = currentAssets[senderAssetIndex];
-        const newBalance = Math.max(0, senderAsset.balance - paymentData.totalDebit);
-        return currentAssets.map((asset, index) => index === senderAssetIndex ? { ...asset, balance: newBalance } : asset );
-    });
-    if (!updateError) {
-       addPaymentHistoryEntry({
-           type: paymentData.paymentType === 'hvt' ? 'HVT' : 'Cross-Border',
-           amount: paymentData.amount, currency: paymentData.currency,
-           recipient: paymentData.recipientName || paymentData.recipientAccount,
-           status: paymentData.paymentType === 'hvt' ? 'Pending Approval' : 'Completed',
-           reference: paymentData.paymentType === 'hvt' ? (paymentData.id || null) : paymentData.debitReference
-       });
-        alert(`Payment initiated!...`);
-    } else { alert("Error processing payment submission."); }
-     if (!updateError) {
-        if (paymentData.paymentType === 'hvt') { handleBackToPaymentsDash('high-value-dash'); }
-        else { handleBackToPaymentsDash('cross-border-dash'); }
-     }
-  };
 
-  // --- Filter History based on Current Dashboard View ---
-  const filteredHistory = useMemo(() => {
+    // --- ONLY attempt balance update for institutional payments ---
+    if (paymentData._ui_payment_origin === 'institutional') {
+        console.log("Attempting balance update for institutional payment...");
+        setAssets(currentAssets => {
+            const senderAssetIndex = currentAssets.findIndex(asset => asset.id === paymentData.payment_source?.account_id);
+            if (senderAssetIndex === -1) {
+                console.error("Error in setAssets: Institutional sender account not found. ID:", paymentData.payment_source?.account_id);
+                updateError = true;
+                return currentAssets;
+            }
+            const senderAsset = currentAssets[senderAssetIndex];
+            const totalDebit = paymentData._simulated_total_debit || 0;
+
+            // Basic check to prevent negative balance simulation if form validation failed somehow
+            if(senderAsset.balance < totalDebit) {
+                console.error("Error in setAssets: Insufficient balance for institutional payment.");
+                updateError = true;
+                return currentAssets;
+            }
+
+            const newBalance = Math.max(0, senderAsset.balance - totalDebit);
+            console.log(`Updating institutional balance for ${senderAsset.symbol}: ${senderAsset.balance} -> ${newBalance}`);
+            return currentAssets.map((asset, index) => index === senderAssetIndex ? { ...asset, balance: newBalance } : asset);
+        });
+    } else {
+        console.log("Skipping balance update for client payment (handled conceptually).");
+        // For client payments, we assume the debit happened off-platform or is managed elsewhere
+        // No error is set here because the expected action (logging history) can still proceed.
+        updateError = false;
+    }
+    // --- End Conditional Balance Update ---
+
+
+    // Proceed if the balance update (if attempted) was successful OR if it was skipped (client payment)
+    if (!updateError) {
+       // Log history for both types
+       addPaymentHistoryEntry({
+           type: paymentData._ui_payment_type === 'hvt' ? 'HVT' : 'Cross-Border',
+           amount: paymentData.payment_info.amount,
+           currency: paymentData.payment_info.currency,
+           recipient: paymentData.destination_counterparty_info.name || paymentData.destination_counterparty_info.accountIdentifier,
+           // Assign status based on type (HVT goes to pending, others complete for demo)
+           status: paymentData._ui_payment_type === 'hvt' ? 'Pending Approval' : 'Completed',
+           // Try using description as reference, fallback to debitReference if needed
+           reference: paymentData.payment_info.description || paymentData.debitReference || null
+       });
+        // Show generic success alert
+        alert(`Payment initiated successfully!`);
+
+        // Navigate back based on UI type
+        if (paymentData._ui_payment_type === 'hvt') {
+            handleBackToPaymentsDash('high-value-dash');
+        } else {
+            handleBackToPaymentsDash('cross-border-dash');
+        }
+    } else {
+        // Show error alert ONLY if updateError was explicitly set (i.e., institutional balance update failed)
+        alert("Error processing payment submission. Failed to update institutional balance.");
+    }
+  };
+  // --- END MODIFIED Handler ---
+
+  // Filter History based on Current Dashboard View (Unchanged)
+  const filteredHistory = useMemo(() => { /* ... */
       if (paymentScreen.includes('cross-border') || paymentScreen === 'create-payment' || paymentScreen === 'view-templates' || paymentScreen === 'manage-recurring') {
-          // Show Cross-Border and maybe generic Payment types
           return paymentHistory.filter(entry => entry.type === 'Cross-Border' || entry.type === 'Payment');
       } else if (paymentScreen.includes('high-value') || paymentScreen === 'create-hvt' || paymentScreen === 'authorize-hvt' || paymentScreen === 'view-transfer-details') {
-          // Show only HVT types
           return paymentHistory.filter(entry => entry.type === 'HVT');
       } else if (paymentScreen.includes('bulk') || paymentScreen === 'upload-bulk-file' || paymentScreen === 'create-bulk-template') {
-          // Show only Bulk types (adjust type name as needed)
           return paymentHistory.filter(entry => entry.type === 'Bulk Process' || entry.type === 'Bulk Upload');
       }
-      return []; // Return empty for non-dashboard screens or unknown types
-  }, [paymentScreen, paymentHistory]);
+      return [];
+   }, [paymentScreen, paymentHistory]);
 
 
-  // --- Render Logic ---
+  // --- Render Logic (Unchanged) ---
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">Payments Dashboard</h1>
 
-      {/* Tabs (Unchanged) */}
+      {/* Tabs */}
       <div className="mb-6 border-b border-gray-200"> <div className="flex space-x-6"> {/* ... tab buttons ... */}
         <button className={`pb-2 px-1 text-sm sm:text-base focus:outline-none ${ paymentScreen.includes('cross-border') || paymentScreen === 'create-payment' || paymentScreen === 'view-templates' || paymentScreen === 'manage-recurring' ? 'border-b-2 font-medium text-emtech-gold border-emtech-gold' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => handleNavigate('cross-border-dash')} > Cross-Border Payments </button>
         <button className={`pb-2 px-1 text-sm sm:text-base focus:outline-none ${ paymentScreen.includes('high-value') || paymentScreen === 'create-hvt' || paymentScreen === 'authorize-hvt' || paymentScreen === 'view-transfer-details' ? 'border-b-2 font-medium text-emtech-gold border-emtech-gold' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => handleNavigate('high-value-dash')} > High-Value Transfers </button>
         <button className={`pb-2 px-1 text-sm sm:text-base focus:outline-none ${ paymentScreen.includes('bulk') || paymentScreen === 'upload-bulk-file' || paymentScreen === 'create-bulk-template' ? 'border-b-2 font-medium text-emtech-gold border-emtech-gold' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => handleNavigate('bulk-dash')} > Bulk Payments </button>
       </div> </div>
 
-      {/* Conditional Screen Rendering (Pass filtered history and click handler down) */}
+      {/* Conditional Screen Rendering */}
       <div className="mb-12">
         {paymentScreen === 'cross-border-dash' && ( <CrossBorderDashboardView onNavigate={handleNavigate} history={filteredHistory} onHistoryRowClick={handlePaymentHistoryRowClick} /> )}
         {paymentScreen === 'create-payment' && ( <CreatePaymentScreen assets={assets} onBack={() => handleBackToPaymentsDash('cross-border-dash')} onPaymentSubmit={handlePaymentSubmit} /> )}
@@ -138,8 +175,6 @@ const PaymentsDashboard = ({ assets = [], setAssets, assetLogosMap = {} }) => {
         {paymentScreen === 'upload-bulk-file' && ( <UploadBulkFileScreen assets={assets} onBack={() => handleBackToPaymentsDash('bulk-dash')} onBulkSubmit={(data) => console.log("Bulk Submit Placeholder:", data)} /> )}
         {paymentScreen === 'create-bulk-template' && ( <div>Create Bulk Template Placeholder... <button onClick={() => handleBackToPaymentsDash('bulk-dash')} className="text-sm text-blue-600 hover:underline">Back</button></div> )}
       </div>
-
-      {/* --- REMOVED History Log Section from here --- */}
 
       {/* Render Payment History Detail Modal */}
        {isPaymentHistoryModalOpen && (
