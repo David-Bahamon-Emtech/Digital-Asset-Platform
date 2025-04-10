@@ -109,30 +109,47 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit, initialData
    }, [senderAccountId, recipientAccount, purpose, dateType, scheduledDate, amountNumber, selectedSenderAsset, paymentType, traditionalRail, paymentOrigin, onChainNetwork, recipientJurisdiction, exchangeRate, targetCurrency]);
 
   const resetFieldsOnOriginOrTypeChange = useCallback(() => {
-      setSenderAccountId('');
-      setRecipientJurisdiction('');
-      setTraditionalRail('');
-      setOnChainNetwork('');
-      setRecipientName('');
-      setRecipientAccount('');
-      setRecipientInstitution('');
-      setAmount('');
-      setCurrency('');
-      setDescription('');
-      setPurpose('');
-      setErrors({});
-      if (paymentType !== 'traditional') {
-        setSettlementSpeed('standard');
-      }
-  }, [paymentType]);
+    // --- IMPORTANT CHECK: Only run full reset if NOT currently processing template data ---
+    if (initialData) {
+        // If initialData is present, user changing type/origin should maybe only reset specific fields?
+        // For now, let's *skip* the reset entirely if initialData is actively being applied.
+        // This assumes the initialData effect sets ALL necessary fields correctly.
+        console.log('--- resetFieldsOnOriginOrTypeChange: SKIPPING reset because initialData is present.');
+        // We could potentially reset *only* type-specific things like rail/network here if needed,
+        // but let's try skipping completely first.
+        // setTraditionalRail('');
+        // setOnChainNetwork('');
+        // setSettlementSpeed('standard');
+        return; // Exit without resetting fields populated by template
+    }
+    // Only perform the full reset if initialData is null (i.e., not applying a template)
+    console.log('--- resetFieldsOnOriginOrTypeChange: Running FULL reset (no initialData). ---');
+    setSenderAccountId('');
+    setRecipientJurisdiction('');
+    setTraditionalRail('');
+    setOnChainNetwork('');
+    setRecipientName('');
+    setRecipientAccount('');
+    setRecipientInstitution('');
+    setAmount('');
+    setCurrency('');
+    setDescription('');
+    setPurpose('');
+    // Reset sending entity only if it's currently set (to avoid overriding template?) - check this logic
+    if (senderEntity) setSenderEntity(sampleEntities[0] || '');
+    setErrors({}); // Clear all errors
+    setSettlementSpeed('standard'); // Reset speed
+  }, [initialData, sampleEntities]); // Add initialData as a dependency!
 
   useEffect(() => {
-      resetFieldsOnOriginOrTypeChange();
-  }, [paymentOrigin, resetFieldsOnOriginOrTypeChange]);
+    console.log(`>>> CreatePaymentScreen: useEffect [paymentOrigin:${paymentOrigin}] triggering reset check.`);
+    resetFieldsOnOriginOrTypeChange();
+  }, [paymentOrigin, resetFieldsOnOriginOrTypeChange]); // Dependency includes the callback
 
   useEffect(() => {
-      resetFieldsOnOriginOrTypeChange();
-  }, [paymentType, resetFieldsOnOriginOrTypeChange]);
+    console.log(`>>> CreatePaymentScreen: useEffect [paymentType:${paymentType}] triggering reset check.`);
+    resetFieldsOnOriginOrTypeChange();
+  }, [paymentType, resetFieldsOnOriginOrTypeChange]); // Dependency includes the callback
 
   useEffect(() => {
       const symbol = selectedSenderAsset?.symbol || '';
@@ -250,40 +267,92 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit, initialData
   }, [workflowState]);
 
   useEffect(() => {
+    // --- LOG ENTRY POINT ---
+    console.log('>>> CreatePaymentScreen: useEffect [initialData, assets] RUNNING.');
+    
     if (initialData) {
-        setPaymentType(initialData.paymentType || 'on-chain');
-        setRecipientName(initialData.recipientName || '');
-        setRecipientAccount(initialData.recipientAccount || '');
-        setRecipientInstitution(initialData.recipientInstitution || '');
-        setAmount(initialData.amount ? String(initialData.amount) : '');
-        setPurpose(initialData.purpose || '');
+        // --- LOG RECEIVED DATA ---
+        console.log('>>> CreatePaymentScreen: initialData prop has value:', JSON.stringify(initialData, null, 2));
 
-        if (initialData.paymentType === 'traditional') {
+        // --- APPLY TEMPLATE ---
+        console.log(`   -> Setting paymentType: ${initialData.paymentType || 'on-chain'}`);
+        setPaymentType(initialData.paymentType || 'on-chain');
+        console.log(`   -> Setting recipientName: ${initialData.recipientName || ''}`);
+        setRecipientName(initialData.recipientName || '');
+        console.log(`   -> Setting recipientAccount: ${initialData.recipientAccount || ''}`);
+        setRecipientAccount(initialData.recipientAccount || '');
+        console.log(`   -> Setting recipientInstitution: ${initialData.recipientInstitution || ''}`);
+        setRecipientInstitution(initialData.recipientInstitution || '');
+        console.log(`   -> Setting amount: ${initialData.amount ? String(initialData.amount) : ''}`);
+        setAmount(initialData.amount ? String(initialData.amount) : '');
+        console.log(`   -> Setting purpose: ${initialData.purpose || ''}`);
+        setPurpose(initialData.purpose || '');
+        // Also set network if present in template data (it was in the log)
+        console.log(`   -> Setting onChainNetwork: ${initialData.onChainNetwork || ''}`);
+        setOnChainNetwork(initialData.onChainNetwork || '');
+
+        if (initialData.paymentType === 'Traditional') {
+            console.log(`   -> Setting traditionalRail: ${initialData.traditionalRail || ''}`);
             setTraditionalRail(initialData.traditionalRail || '');
+             console.log(`   -> Setting settlementSpeed: ${initialData.settlementSpeed || 'standard'}`);
+            setSettlementSpeed(initialData.settlementSpeed || 'standard');
         } else {
             setTraditionalRail('');
         }
-        // Handle onChainNetwork if present in templates? Likely not.
-        // setOnChainNetwork(initialData.onChainNetwork || '');
 
-        const senderAccount = assets.find(acc => acc.label === initialData.fromAccountLabel);
+        // --- SENDER ACCOUNT LOOKUP ---
+        const labelToFind = initialData.fromAccountLabel;
+        console.log(`   -> LOOKING UP sender account with label: "${labelToFind}"`);
+        // Log available labels for comparison
+        console.log(`   -> Available asset labels:`, assets.map(a => a.label));
+
+        const senderAccount = assets.find(acc => acc.label === labelToFind);
+
         if (senderAccount) {
+            console.log(`   -> SUCCESS: Found sender account: ID=${senderAccount.id}, Label=${senderAccount.label}, isInst=${senderAccount.isInstitutional}`);
             setSenderAccountId(senderAccount.id);
             setPaymentOrigin(senderAccount.isInstitutional ? 'institutional' : 'client');
         } else {
-            console.warn(`Template Error: Sender account with label "${initialData.fromAccountLabel}" not found.`);
+            // Log failure reason more clearly
+            console.error(`   -> FAILED: Sender account lookup did NOT find label: "${labelToFind}" in available assets.`);
             setSenderAccountId('');
-            setPaymentOrigin('institutional');
+            setPaymentOrigin(initialData.paymentOrigin || 'institutional');
         }
 
+        // --- SET OTHER FIELDS ---
+        console.log(`   -> Setting dateType: immediate`);
         setDateType('immediate');
         setScheduledDate('');
-        setDescription(initialData.description || ''); // Keep description if template has it
-        setDebitReference(''); // Reset instance-specific field
+        console.log(`   -> Setting description: ${initialData.description || ''}`);
+        setDescription(initialData.description || '');
+        setDebitReference('');
 
+         // Set sending entity if institutional and present in template
+         if ((senderAccount?.isInstitutional || initialData.paymentOrigin === 'institutional') && initialData.sendingEntity) {
+             console.log(`   -> Setting sendingEntity: ${initialData.sendingEntity}`);
+             setSenderEntity(initialData.sendingEntity);
+         } else if (!initialData.sendingEntity && (senderAccount?.isInstitutional || initialData.paymentOrigin === 'institutional')) {
+             // Use default if institutional but template lacks entity
+             const defaultEntity = sampleEntities[0] || '';
+             console.log(`   -> Setting default sendingEntity: ${defaultEntity}`);
+             setSenderEntity(defaultEntity);
+         } else {
+             // Clear if not institutional
+             setSenderEntity('');
+         }
+
+        // --- CLEAR ERRORS ---
+        console.log('   -> Clearing errors.');
         setErrors({});
+    } else {
+        // --- LOG NO DATA ---
+        console.log('>>> CreatePaymentScreen: initialData prop is null/falsy. No pre-fill applied.');
     }
-  }, [initialData, assets]);
+    
+    // --- LOG EXIT POINT ---
+    console.log('>>> CreatePaymentScreen: useEffect [initialData, assets] FINISHED.');
+
+  }, [initialData, assets]); // Dependencies are unchanged
 
   const handleContinueToReview = (event) => {
       event.preventDefault();
@@ -427,8 +496,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit, initialData
                   </>}
                   <dt className="text-gray-500">From Account:</dt>
                   <dd className="font-medium">{senderLabel} ({senderSymbol})</dd>
-                  <dt className="text-gray-500">Debit Reference:</dt>
-                  <dd>{debitReference || <span className="italic text-gray-500">None</span>}</dd>
+
 
                   <div className="md:col-span-2 font-medium text-gray-700 border-b pb-1 mb-1 mt-2">Recipient Details</div>
                   {paymentOrigin === 'client' && !isInternal && <>
@@ -647,17 +715,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit, initialData
                                 </select>
                                 {renderError(errors.senderAccountId)}
                                 {selectedSenderAsset && <p className="text-xs text-gray-500 mt-1">Selected Balance: {selectedSenderAsset.balance.toLocaleString()} {selectedSenderAsset.symbol}</p>}
-                            </div>
-                            <div>
-                                <label htmlFor="debitRef" className="block mb-1 text-sm font-medium text-gray-700">Debit Reference</label>
-                                <input
-                                    id="debitRef"
-                                    type="text"
-                                    className="w-full p-2 border rounded text-sm border-gray-300"
-                                    placeholder="Internal reference ID"
-                                    value={debitReference}
-                                    onChange={(e) => setDebitReference(e.target.value)}
-                                />
                             </div>
                         </div>
                     </div>
