@@ -1,6 +1,5 @@
 // src/features/Payments/CreatePaymentScreen.js
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-
 import TraditionalPaymentFields from './TraditionalPaymentFields';
 import OnChainPaymentFields from './OnChainPaymentFields';
 import { renderError } from '../../utils/displayUtils';
@@ -11,11 +10,7 @@ import {
     modalSamplePurposes as samplePurposes
 } from './data/paymentConstants';
 
-/**
- * Screen component for creating a new payment (Cross-Border, HVT, etc.).
- * Manages a multi-step form including details, review, and confirmation workflow.
- */
-const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
+const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit, initialData = null }) => {
 
   const [formStep, setFormStep] = useState('details');
   const [paymentType, setPaymentType] = useState('on-chain');
@@ -89,8 +84,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
       if (amountNumber <= 0) {
           newErrors.amount = 'Please enter a valid positive amount.';
       } else if (selectedSenderAsset && amountNumber > selectedSenderAsset.balance) {
-          const tolerance = 0.01;
-          if (amountNumber > selectedSenderAsset.balance + tolerance) {
+         if (amountNumber > selectedSenderAsset.balance) {
               newErrors.amount = `Amount exceeds available balance (${selectedSenderAsset.balance.toLocaleString()}).`;
           }
       }
@@ -150,7 +144,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
           setAmount('');
       }
       if (paymentOrigin === 'institutional' && paymentType === 'on-chain' && selectedSenderAsset && !selectedSenderAsset.blockchain) {
-        // Handle case where institutional on-chain selected but asset has no blockchain
+          // Intentionally left blank - handle UI state elsewhere if needed
       }
       if (paymentOrigin === 'client' && paymentType !== 'internal' && selectedSenderAsset && !ratesToUSD[symbol]) {
           setRecipientJurisdiction('');
@@ -158,7 +152,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
       } else if (errors.recipientJurisdiction === 'Source currency cannot be used for FX.') {
           setErrors(prev => ({ ...prev, recipientJurisdiction: null }));
       }
-  }, [selectedSenderAsset, paymentOrigin, paymentType, errors.amount, errors.recipientJurisdiction, amountNumber]); // Removed console logs
+  }, [selectedSenderAsset, paymentOrigin, paymentType, errors.amount, errors.recipientJurisdiction, amountNumber]);
 
   useEffect(() => {
       const isClientPayment = paymentOrigin === 'client';
@@ -177,12 +171,11 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                   const network = effectiveOnChainNetwork;
                   const baseFeeUSD = baseGasFeeUSD[network] || baseGasFeeUSD.default;
                   const sourceToUSDRate = ratesToUSD[currency] || 1;
-                  const variability = 1 + (Math.random() * 0.1 - 0.05); // +/- 5% variability
+                  const variability = 1 + (Math.random() * 0.1 - 0.05);
                   networkFeeSourceCurrency = (baseFeeUSD / sourceToUSDRate) * variability;
-                  calculatedPreview.fee = 0; // Assume no separate platform fee for on-chain
+                  calculatedPreview.fee = 0;
                   calculatedPreview.networkFee = networkFeeSourceCurrency;
 
-                  // Try to display in native token
                   const nativeSymbol = onChainNetworksList.find(n => n.code === network)?.nativeSymbol;
                   const nativePriceUSD = nativeTokenPricesUSD[nativeSymbol];
                   if (nativeSymbol && nativePriceUSD > 0) {
@@ -223,7 +216,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     exchangeRate: null, receivedAmount: null, receivedCurrencySymbol: null,
                     networkFeeDisplay: null
                 });
-              return; // Exit effect on error
+              return;
           }
       }
       setPreviewData(calculatedPreview);
@@ -238,7 +231,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
           setTimeout(() => {
               setWorkflowState('compliance_passed');
               setIsLoading(false);
-          }, 2000); // Simulate check duration
+          }, 2000);
       } else if (workflowState === 'compliance_passed') {
           setWorkflowState('pending_2fa');
           setWorkflowMessage('Compliance checks passed. Please complete Two-Factor Authentication.');
@@ -255,6 +248,42 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
           setIsCodeSent(false);
       }
   }, [workflowState]);
+
+  useEffect(() => {
+    if (initialData) {
+        setPaymentType(initialData.paymentType || 'on-chain');
+        setRecipientName(initialData.recipientName || '');
+        setRecipientAccount(initialData.recipientAccount || '');
+        setRecipientInstitution(initialData.recipientInstitution || '');
+        setAmount(initialData.amount ? String(initialData.amount) : '');
+        setPurpose(initialData.purpose || '');
+
+        if (initialData.paymentType === 'traditional') {
+            setTraditionalRail(initialData.traditionalRail || '');
+        } else {
+            setTraditionalRail('');
+        }
+        // Handle onChainNetwork if present in templates? Likely not.
+        // setOnChainNetwork(initialData.onChainNetwork || '');
+
+        const senderAccount = assets.find(acc => acc.label === initialData.fromAccountLabel);
+        if (senderAccount) {
+            setSenderAccountId(senderAccount.id);
+            setPaymentOrigin(senderAccount.isInstitutional ? 'institutional' : 'client');
+        } else {
+            console.warn(`Template Error: Sender account with label "${initialData.fromAccountLabel}" not found.`);
+            setSenderAccountId('');
+            setPaymentOrigin('institutional');
+        }
+
+        setDateType('immediate');
+        setScheduledDate('');
+        setDescription(initialData.description || ''); // Keep description if template has it
+        setDebitReference(''); // Reset instance-specific field
+
+        setErrors({});
+    }
+  }, [initialData, assets]);
 
   const handleContinueToReview = (event) => {
       event.preventDefault();
@@ -289,12 +318,12 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
           setIsCodeSent(true);
           setWorkflowMessage('Code sent to registered device (Simulated). Please enter the code below.');
           setIsLoading(false);
-      }, 1000); // Simulate sending
+      }, 1000);
   };
 
   const handleVerify2FA = () => {
       if (isLoading) return;
-      if (twoFactorCode === '123456') { // Hardcoded code for demo
+      if (twoFactorCode === '123456') {
           setIsLoading(true);
           setWorkflowMessage('Code verified successfully. Preparing final confirmation...');
           setTimeout(() => {
@@ -437,7 +466,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                   <dt className="text-gray-500">Description:</dt>
                   <dd>{description || <span className="italic text-gray-500">None</span>}</dd>
 
-                  {/* --- Fees Section --- */}
                   {(previewData.fee > 0 || previewData.networkFee > 0) ? (
                     <>
                         <dt className="text-gray-500 pt-2 border-t md:col-span-2">Fees:</dt>
@@ -456,16 +484,12 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                         <dd className="pt-2 border-t italic text-gray-500 md:col-span-1">None Estimated</dd>
                     </>
                   )}
-
-                  {/* --- Total Debit Row FIX --- */}
                   <div className="md:col-span-2 flex justify-between items-start pt-2 border-t mt-2">
                      <dt className="font-semibold text-gray-800">Total Estimated Debit:</dt>
                      <dd className="font-semibold text-gray-800 text-base">
                          {(previewData.total ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} {previewData.currencySymbol}
                      </dd>
                   </div>
-                  {/* --- End Total Debit Row FIX --- */}
-
               </dl>
           </div>
       );
@@ -483,7 +507,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
             </button>
         </div>
 
-        {/* --- Stepper --- */}
         <div className="mb-8">
             <div className="flex items-center justify-between">
                 {['Payment Details', 'Review', 'Confirm'].map((stepName, index) => {
@@ -510,10 +533,8 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
             </div>
         </div>
 
-        {/* --- Step 1: Details Form --- */}
         {formStep === 'details' && (
             <form onSubmit={handleContinueToReview}>
-                {/* Payment Origin */}
                 <div className="mb-6">
                     <h2 className="font-medium mb-2 text-gray-800">Payment Origin <span className="text-red-600">*</span></h2>
                     <div className="grid grid-cols-2 gap-0 border border-gray-300 rounded-md overflow-hidden">
@@ -538,7 +559,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     </div>
                 </div>
 
-                {/* Payment Type */}
                 <div className="mb-6">
                     <h2 className="font-medium mb-3 text-gray-800">Payment Type <span className="text-red-600">*</span></h2>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -572,7 +592,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     </div>
                 </div>
 
-                 {/* Conditional Fields */}
                  <TraditionalPaymentFields
                      paymentType={paymentType}
                      traditionalRail={traditionalRail}
@@ -595,9 +614,7 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                      clearError={() => setErrors(prev => ({ ...prev, onChainNetwork: null }))}
                  />
 
-                {/* From / To Sections */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-6">
-                    {/* From Section */}
                     <div>
                         <h2 className="font-medium mb-3 text-gray-800">From</h2>
                         <div className="space-y-4">
@@ -645,7 +662,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                         </div>
                     </div>
 
-                    {/* To Section */}
                     <div>
                         <h2 className="font-medium mb-3 text-gray-800">To</h2>
                         <div className="space-y-4">
@@ -705,7 +721,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     </div>
                 </div>
 
-                {/* Payment Details Section */}
                 <div className="mt-6">
                     <h2 className="font-medium mb-3 text-gray-800">Payment Details</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -785,7 +800,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     </div>
                 </div>
 
-                {/* Description */}
                 <div className="mt-4">
                     <label htmlFor="description" className="block mb-1 text-sm font-medium text-gray-700">Payment Description</label>
                     <textarea
@@ -798,7 +812,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     ></textarea>
                 </div>
 
-                {/* Preview Section */}
                 <div className="mt-6">
                     <h2 className="font-medium mb-3 text-gray-800">Preview</h2>
                     <div className="p-4 bg-gray-50 rounded border border-gray-200 text-sm">
@@ -848,7 +861,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                     </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="mt-8 flex space-x-3 justify-end">
                     <button
                         type="button"
@@ -868,7 +880,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
             </form>
         )}
 
-        {/* --- Step 2: Review Screen --- */}
         {formStep === 'review' && (
           <div>
             <h2 className="text-xl font-medium mb-4 text-gray-800">Review Payment</h2>
@@ -893,13 +904,11 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
           </div>
         )}
 
-        {/* --- Step 3: Confirm Screen --- */}
         {formStep === 'confirm' && (
           <div>
             <h2 className="text-xl font-medium mb-4 text-gray-800">Confirm Payment Initiation</h2>
             {renderReviewData()}
 
-            {/* Confirmation Workflow Box */}
             <div className={`mt-6 p-4 border rounded-lg ${
                 workflowState === 'compliance_failed' ? 'bg-red-50 border-red-300'
                 : workflowState === '2fa_passed' ? 'bg-green-50 border-green-300'
@@ -907,7 +916,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
              }`}>
                 <div className="flex items-start">
                     <div className="flex-shrink-0 mr-3">
-                       {/* Status Icon */}
                        {workflowState === 'pending_compliance' || workflowState === 'pending_2fa' || isLoading ? (
                            <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -945,12 +953,10 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                             {isLoading ? 'Processing...' : workflowMessage || 'Initiating confirmation steps...'}
                          </p>
 
-                         {/* Compliance Failed Message */}
                          {workflowState === 'compliance_failed' && !isLoading && (
                              <p className="text-red-700 font-medium text-sm">Please review the payment details or contact support.</p>
                          )}
 
-                         {/* 2FA Input Area */}
                          {workflowState === 'pending_2fa' && !isLoading && (
                              <div className="mt-4 space-y-3">
                                  <div className="flex items-end space-x-3">
@@ -987,7 +993,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                              </div>
                          )}
 
-                         {/* Final Confirmation Button */}
                          {workflowState === '2fa_passed' && !isLoading && (
                              <div className="mt-4 p-4 border-t border-gray-200">
                                  <p className="text-sm text-green-700 font-medium mb-4">All checks passed. Ready to initiate payment.</p>
@@ -1004,7 +1009,6 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                 </div>
             </div>
 
-            {/* Action Buttons for Confirm Step */}
             <div className="mt-8 flex space-x-3 justify-between">
                 {(workflowState === 'idle' || workflowState === 'pending_compliance' || workflowState === 'pending_2fa') && !isLoading ? (
                     <button
@@ -1015,12 +1019,12 @@ const CreatePaymentScreen = ({ assets = [], onBack, onPaymentSubmit }) => {
                         Back to Review
                     </button>
                 ) : (
-                    <div/> /* Placeholder to keep spacing consistent */
+                    <div/>
                 )}
                  <button
                      type="button"
                      className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50"
-                     onClick={handleBackToDetails} // Always allow going back to edit? Maybe disable if submitted?
+                     onClick={handleBackToDetails}
                      disabled={isLoading}
                  >
                      Cancel / Back to Edit
