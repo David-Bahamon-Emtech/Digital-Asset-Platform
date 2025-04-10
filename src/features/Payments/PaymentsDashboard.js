@@ -11,40 +11,60 @@ import CreateHighValueTransferScreen from './CreateHighValueTransferScreen';
 import UploadBulkFileScreen from './UploadBulkFileScreen';
 import ViewTransferDetailsScreen from './ViewTransferDetailsScreen';
 import PaymentHistoryDetailModal from './PaymentHistoryDetailModal';
-import RecurringPaymentModal from './RecurringPaymentModal'; // Import the new modal
-
-// Import constants - initialPaymentHistory is handled in App.js
-// recurringPayments state is still local here
+import RecurringPaymentModal from './RecurringPaymentModal';
 import {
     dummyTemplates,
     initialDummyRecurringPayments
 } from './data/paymentConstants';
+import {
+    parseISO, addDays, addWeeks, addMonths, isValid, startOfDay, format as formatDate
+} from 'date-fns';
 
 const PaymentsDashboard = ({
-    // Props from App.js
     assets = [],
     setAssets,
     assetLogosMap = {},
-    // Props related to lifted history state
     paymentHistory = [],
     onAddHistoryEntry,
     onUpdateHistoryStatus,
 }) => {
 
-    // --- Component State ---
     const [paymentScreen, setPaymentScreen] = useState('cross-border-dash');
     const [viewingTransferDetails, setViewingTransferDetails] = useState(null);
     const [isPaymentHistoryModalOpen, setIsPaymentHistoryModalOpen] = useState(false);
     const [selectedPaymentHistoryEntry, setSelectedPaymentHistoryEntry] = useState(null);
-    const [templates, setTemplates] = useState(dummyTemplates); // Template state is still local (or unused if ViewTemplatesScreen is local)
-    const [recurringPayments, setRecurringPayments] = useState(initialDummyRecurringPayments); // Recurring state is local
+    const [templates, setTemplates] = useState(dummyTemplates);
+    const [recurringPayments, setRecurringPayments] = useState(initialDummyRecurringPayments);
     const [initialFormData, setInitialFormData] = useState(null);
-
-    // State for the Recurring Payment Modal
     const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
-    const [editingRecurringPayment, setEditingRecurringPayment] = useState(null); // null=create, object=edit
+    const [editingRecurringPayment, setEditingRecurringPayment] = useState(null);
 
-    // --- Handlers ---
+    const calculateNextDateFromToday = (payment, startDate = new Date()) => {
+        if (!payment?.frequency) return null;
+        const today = startOfDay(startDate);
+        let calculatedNextDate = today;
+        let attempts = 0;
+        const maxAttempts = 366;
+
+        while (attempts < maxAttempts) {
+            let potentialNextDate = calculatedNextDate;
+            switch (payment.frequency?.toLowerCase().split(' ')[0]) {
+                case 'daily': potentialNextDate = addDays(today, attempts); break;
+                case 'weekly': potentialNextDate = addWeeks(today, attempts); break;
+                case 'bi-weekly': potentialNextDate = addWeeks(today, attempts * 2); break;
+                case 'monthly': potentialNextDate = addMonths(today, attempts); break;
+                case 'quarterly': potentialNextDate = addMonths(today, attempts * 3); break;
+                case 'annually': potentialNextDate = addMonths(today, attempts * 12); break;
+                default: return null;
+            }
+            potentialNextDate = startOfDay(potentialNextDate);
+            if (potentialNextDate >= today) {
+                return formatDate(potentialNextDate, 'yyyy-MM-dd');
+            }
+            attempts++;
+        }
+        return null;
+    };
 
     const handleNavigate = (screen, data = null) => {
         setInitialFormData(null);
@@ -53,11 +73,8 @@ const PaymentsDashboard = ({
             setInitialFormData(data.templateData);
         } else if (screen === 'view-transfer-details' && data?.transferId) {
             const transfer = paymentHistory.find(item => item.id === data.transferId && item.type === 'HVT');
-            if (transfer) {
-                setViewingTransferDetails(transfer);
-            } else {
-                console.error("Could not find HVT transfer with ID:", data.transferId);
-            }
+            if (transfer) { setViewingTransferDetails(transfer); }
+            else { console.error("Could not find HVT transfer with ID:", data.transferId); }
         }
         setPaymentScreen(screen);
     };
@@ -85,15 +102,11 @@ const PaymentsDashboard = ({
             status: paymentData._ui_payment_type === 'hvt' ? 'Pending Approval' : 'Submitted',
             reference: generatedReference, rawData: paymentData
         };
-
-        if (typeof onAddHistoryEntry === 'function') {
-            onAddHistoryEntry(historyEntry); // Use prop to update lifted state
-        } else { console.error("onAddHistoryEntry handler is missing!"); }
-
+        if (typeof onAddHistoryEntry === 'function') { onAddHistoryEntry(historyEntry); }
+        else { console.error("onAddHistoryEntry handler is missing!"); }
         if (historyEntry.status !== 'Pending Approval' && paymentData._ui_payment_origin === 'institutional' && typeof setAssets === 'function' && paymentData.payment_source.account_id && paymentData._simulated_total_debit > 0) {
-            setAssets(prevAssets => { /* ... update balance ... */ });
+            setAssets(prevAssets => prevAssets.map(acc => acc.id === paymentData.payment_source.account_id ? { ...acc, balance: Math.max(0, acc.balance - paymentData._simulated_total_debit) } : acc));
         }
-
         let targetDashboardScreen = 'cross-border-dash';
         if (paymentData._ui_payment_type === 'hvt') { targetDashboardScreen = 'high-value-dash'; }
         setPaymentScreen(targetDashboardScreen);
@@ -110,95 +123,94 @@ const PaymentsDashboard = ({
             recipient: bulkData.file?.name || bulkData.fileName || 'Bulk File', status: 'Processing',
             reference: generatedReference, rawData: bulkData
         };
-
-        if (typeof onAddHistoryEntry === 'function') {
-            onAddHistoryEntry(historyEntry); // Use prop to update lifted state
-        } else { console.error("onAddHistoryEntry handler is missing!"); }
-
+        if (typeof onAddHistoryEntry === 'function') { onAddHistoryEntry(historyEntry); }
+        else { console.error("onAddHistoryEntry handler is missing!"); }
         alert(`Bulk file submitted for processing! Ref: ${generatedReference}`);
         setPaymentScreen('bulk-dash');
         setInitialFormData(null);
     };
 
-    // Template handlers still modify local state (assuming ViewTemplatesScreen manages its own)
     const handleSaveTemplate = (templateData) => {
         console.log('PaymentsDashboard: handleSaveTemplate called with:', templateData);
         const index = templateData.id ? templates.findIndex(t => t.id === templateData.id) : -1;
         if (index > -1) { setTemplates(prev => prev.map((t, i) => i === index ? { ...t, ...templateData, lastUsed: t.lastUsed } : t)); }
         else { const newTemplate = { ...templateData, id: templateData.id || `tpl-${Date.now()}` }; setTemplates(prev => [newTemplate, ...prev]); }
     };
+
     const handleDeleteTemplate = (templateId) => {
         console.log('PaymentsDashboard: handleDeleteTemplate called with ID:', templateId);
         setTemplates(prev => prev.filter(t => t.id !== templateId));
     };
 
-    // Recurring Payment Handlers - Updated for Modal
     const handleToggleRecurring = (paymentId, currentStatus) => {
         console.log('PaymentsDashboard: handleToggleRecurring called for ID:', paymentId);
         const newStatus = currentStatus === 'Active' ? 'Paused' : 'Active';
-        setRecurringPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: newStatus, nextDate: newStatus === 'Paused' ? 'Paused' : p.nextDate } : p));
+        setRecurringPayments(prev => prev.map(p => {
+            if (p.id === paymentId) {
+                let nextDateValue = p.nextDate;
+                if (newStatus === 'Paused') {
+                    nextDateValue = null;
+                    console.log(`Pausing ${paymentId}, nextDate set to null.`);
+                } else if (newStatus === 'Active') {
+                    nextDateValue = calculateNextDateFromToday(p);
+                    console.log(`Activating ${paymentId}, calculated nextDate: ${nextDateValue}`);
+                    if (!nextDateValue) {
+                         console.warn(`Could not calculate next date for ${paymentId}. Setting to TBD.`);
+                         nextDateValue = 'TBD';
+                    }
+                }
+                return { ...p, status: newStatus, nextDate: nextDateValue };
+            }
+            return p;
+        }));
     };
+
     const handleDeleteRecurring = (paymentId) => {
         console.log('PaymentsDashboard: handleDeleteRecurring called for ID:', paymentId);
         setRecurringPayments(prev => prev.filter(p => p.id !== paymentId));
     };
+
     const handleEditRecurring = (paymentId) => {
         console.log('PaymentsDashboard: handleEditRecurring called for ID:', paymentId);
         const paymentToEdit = recurringPayments.find(p => p.id === paymentId);
-        if (paymentToEdit) {
-            setEditingRecurringPayment(paymentToEdit);
-            setIsRecurringModalOpen(true); // Open modal for editing
-        } else { alert("Error: Could not find recurring payment to edit."); }
+        if (paymentToEdit) { setEditingRecurringPayment(paymentToEdit); setIsRecurringModalOpen(true); }
+        else { alert("Error: Could not find recurring payment to edit."); }
     };
+
     const handleSetupNewRecurring = () => {
         console.log('PaymentsDashboard: handleSetupNewRecurring called');
-        setEditingRecurringPayment(null); // null signifies 'create' mode
-        setIsRecurringModalOpen(true); // Open modal for creation
+        setEditingRecurringPayment(null);
+        setIsRecurringModalOpen(true);
     };
+
     const handleSaveRecurringPayment = (savedData) => {
-      console.log("PaymentsDashboard: Saving recurring payment:", savedData);
-      setRecurringPayments(prev => {
-          const existingIndex = savedData.id ? prev.findIndex(p => p.id === savedData.id) : -1;
+        console.log("PaymentsDashboard: Saving recurring payment:", savedData);
+        setRecurringPayments(prev => {
+            const existingIndex = savedData.id ? prev.findIndex(p => p.id === savedData.id) : -1;
+            if (existingIndex > -1) {
+                const updatedPayments = [...prev];
+                updatedPayments[existingIndex] = { ...prev[existingIndex], ...savedData };
+                if (typeof updatedPayments[existingIndex].amount === 'string') {
+                     updatedPayments[existingIndex].amount = parseFloat(updatedPayments[existingIndex].amount);
+                }
+                console.log("Updated existing recurring payment:", updatedPayments[existingIndex]);
+                return updatedPayments;
+            } else {
+                const newPayment = {
+                    ...savedData,
+                    id: `rec-${Date.now()}`,
+                    status: 'Active',
+                    nextDate: savedData.startDate || 'TBD', // Use startDate on creation
+                    amount: typeof savedData.amount === 'string' ? parseFloat(savedData.amount) : savedData.amount,
+                };
+                console.log("Added new recurring payment:", newPayment);
+                return [newPayment, ...prev];
+            }
+        });
+        setIsRecurringModalOpen(false);
+        setEditingRecurringPayment(null);
+    };
 
-          if (existingIndex > -1) {
-              // --- Update existing logic ---
-              const updatedPayments = [...prev];
-              // Merge saved data with existing data, ensure ID is kept
-              updatedPayments[existingIndex] = { ...prev[existingIndex], ...savedData };
-              // Ensure amount is stored as number if needed
-              if (typeof updatedPayments[existingIndex].amount === 'string') {
-                   updatedPayments[existingIndex].amount = parseFloat(updatedPayments[existingIndex].amount);
-              }
-              console.log("Updated existing recurring payment:", updatedPayments[existingIndex]);
-              return updatedPayments;
-
-          } else {
-              // --- Add new logic ---
-              const newPayment = {
-                  ...savedData, // Spread data from the modal form
-                  id: `rec-${Date.now()}`, // Generate a simple unique ID
-                  status: 'Active', // Default new payments to Active
-
-                  // --- Set the initial nextDate based on startDate ---
-                  // Simple approach: Assume first payment is on the start date.
-                  // Ensure savedData.startDate is in 'YYYY-MM-DD' format from the input type="date"
-                  nextDate: savedData.startDate || 'TBD', // Use the start date from the modal
-
-                  // Ensure amount is stored as number if needed
-                  amount: typeof savedData.amount === 'string' ? parseFloat(savedData.amount) : savedData.amount,
-
-                  // Add default time if your display/logic needs it (optional)
-                  // nextTime: '9:00 AM UTC',
-              };
-              console.log("Added new recurring payment:", newPayment);
-              return [newPayment, ...prev]; // Add to the beginning of the array
-          }
-      });
-      setIsRecurringModalOpen(false); // Close modal after save
-      setEditingRecurringPayment(null);
-  };
-
-    // HVT Handlers - Use props for history updates
     const handleAuthorizeHvt = (hvtId) => {
         console.log('PaymentsDashboard: handleAuthorizeHvt called for ID:', hvtId);
         const itemToAuthorize = paymentHistory.find(item => item.id === hvtId && item.status === 'Pending Approval');
@@ -206,38 +218,34 @@ const PaymentsDashboard = ({
         if (itemToAuthorize && itemToAuthorize.rawData?._ui_payment_origin === 'institutional' && typeof setAssets === 'function' && itemToAuthorize.rawData?.payment_source?.account_id && itemToAuthorize.rawData?._simulated_total_debit > 0) {
             itemDataForBalanceUpdate = itemToAuthorize.rawData;
         }
-        if (typeof onUpdateHistoryStatus === 'function') {
-            onUpdateHistoryStatus(hvtId, 'Authorized', new Date()); // Use prop to update lifted state
-        } else { console.error("onUpdateHistoryStatus handler is missing!"); }
+        if (typeof onUpdateHistoryStatus === 'function') { onUpdateHistoryStatus(hvtId, 'Authorized', new Date()); }
+        else { console.error("onUpdateHistoryStatus handler is missing!"); }
         if (itemDataForBalanceUpdate) {
-            setAssets(prevAssets => prevAssets.map(acc => { /* ... update balance ... */ }));
+            setAssets(prevAssets => prevAssets.map(acc => acc.id === itemDataForBalanceUpdate.payment_source.account_id ? { ...acc, balance: Math.max(0, acc.balance - itemDataForBalanceUpdate._simulated_total_debit) } : acc));
         }
     };
+
     const handleRejectHvt = (hvtId, reason) => {
         console.log('PaymentsDashboard: handleRejectHvt called for ID:', hvtId);
         const newStatus = `Rejected (${reason || 'No reason provided'})`;
-        if (typeof onUpdateHistoryStatus === 'function') {
-            onUpdateHistoryStatus(hvtId, newStatus, new Date()); // Use prop to update lifted state
-        } else { console.error("onUpdateHistoryStatus handler is missing!"); }
+        if (typeof onUpdateHistoryStatus === 'function') { onUpdateHistoryStatus(hvtId, newStatus, new Date()); }
+        else { console.error("onUpdateHistoryStatus handler is missing!"); }
     };
 
-    // --- Memoized Values ---
     const pendingHvts = useMemo(() => {
         return paymentHistory.filter(item => item.type === 'HVT' && item.status?.toLowerCase().includes('pending'));
-    }, [paymentHistory]); // Depends on history prop
+    }, [paymentHistory]);
 
     const filteredHistory = useMemo(() => {
         if (paymentScreen.startsWith('high-value')) return paymentHistory.filter(item => item.type === 'HVT');
         if (paymentScreen.startsWith('bulk')) return paymentHistory.filter(item => item.type === 'Bulk Process');
         if (paymentScreen.startsWith('cross-border')) return paymentHistory.filter(item => item.type !== 'HVT' && item.type !== 'Bulk Process');
         return paymentHistory;
-    }, [paymentScreen, paymentHistory]); // Depends on history prop
+    }, [paymentScreen, paymentHistory]);
 
-    // --- Render Logic ---
     return (
         <div className="p-8">
             <h1 className="text-2xl font-bold mb-6 text-gray-800">Payments Dashboard</h1>
-            {/* Tab Navigation */}
             <div className="mb-6 border-b border-gray-200">
                 <div className="flex space-x-6">
                     <button className={`pb-2 px-1 text-sm sm:text-base focus:outline-none ${paymentScreen.startsWith('cross-border') || ['create-payment', 'view-templates', 'manage-recurring'].includes(paymentScreen) ? 'border-b-2 font-medium text-emtech-gold border-emtech-gold' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => handleNavigate('cross-border-dash')} > Cross-Border Payments </button>
@@ -246,13 +254,10 @@ const PaymentsDashboard = ({
                 </div>
             </div>
 
-            {/* Conditional Rendering of Screens */}
             <div className="mb-12">
                 {paymentScreen === 'cross-border-dash' && (<CrossBorderDashboardView onNavigate={handleNavigate} history={filteredHistory} onHistoryRowClick={handlePaymentHistoryRowClick} />)}
                 {paymentScreen === 'create-payment' && (<CreatePaymentScreen assets={assets} onBack={() => handleBackToPaymentsDash('cross-border-dash')} onPaymentSubmit={handlePaymentSubmit} initialData={initialFormData} />)}
-                {/* Assuming ViewTemplatesScreen uses LOCAL state */}
                 {paymentScreen === 'view-templates' && (<ViewTemplatesScreen onBack={() => handleBackToPaymentsDash('cross-border-dash')} onNavigate={handleNavigate} assets={assets} />)}
-                {/* ManageRecurringPaymentsScreen receives updated handlers for edit/setup */}
                 {paymentScreen === 'manage-recurring' && (<ManageRecurringPaymentsScreen onBack={() => handleBackToPaymentsDash('cross-border-dash')} recurringPayments={recurringPayments} onToggleRecurringStatus={handleToggleRecurring} onDeleteRecurring={handleDeleteRecurring} onEditRecurring={handleEditRecurring} onSetupNewRecurring={handleSetupNewRecurring} assets={assets} />)}
                 {paymentScreen === 'high-value-dash' && (<HighValueDashboardView onNavigate={handleNavigate} history={filteredHistory} onHistoryRowClick={handlePaymentHistoryRowClick} />)}
                 {paymentScreen === 'create-hvt' && (<CreateHighValueTransferScreen assets={assets} onBack={() => handleBackToPaymentsDash('high-value-dash')} onPaymentSubmit={handlePaymentSubmit} />)}
@@ -263,10 +268,14 @@ const PaymentsDashboard = ({
                 {paymentScreen === 'create-bulk-template' && (<div>Create Bulk Template Placeholder... <button onClick={() => handleBackToPaymentsDash('bulk-dash')} className="text-sm text-blue-600 hover:underline">Back</button></div>)}
             </div>
 
-            {/* Payment History Modal */}
-            {isPaymentHistoryModalOpen && selectedPaymentHistoryEntry && ( <PaymentHistoryDetailModal entry={selectedPaymentHistoryEntry} onClose={() => { setIsPaymentHistoryModalOpen(false); setSelectedPaymentHistoryEntry(null); }} /> )}
+            {isPaymentHistoryModalOpen && selectedPaymentHistoryEntry && (
+           <PaymentHistoryDetailModal
+               entry={selectedPaymentHistoryEntry}
+               onClose={() => { setIsPaymentHistoryModalOpen(false); setSelectedPaymentHistoryEntry(null); }}
+               assets={assets} // <-- ADD THIS LINE TO PASS THE PROP
+           />
+       )}
 
-            {/* Recurring Payment Modal */}
             {isRecurringModalOpen && (
                 <RecurringPaymentModal
                     isOpen={isRecurringModalOpen}

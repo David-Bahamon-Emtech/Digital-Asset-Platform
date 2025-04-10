@@ -1,107 +1,147 @@
 // src/features/Payments/PaymentHistoryDetailModal.js
-// Assuming this file lives directly under src/features/Payments/
 import React from 'react';
+import { getStatusClass, formatAmount } from '../../utils/displayUtils'; // Assuming path and existence of formatAmount
 
-// --- Import centralized utilities ---
-// Adjust path if utils is elsewhere relative to features/Payments
-import { getStatusClass } from '../../utils/displayUtils'; // IMPORTED
+const PaymentHistoryDetailModal = ({ entry, onClose, assets = [] }) => {
+    // --- Basic Fields ---
+    const formattedTimestamp = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'N/A';
+    const statusClass = getStatusClass(entry.status);
+    // Use formatAmount for consistency if available, otherwise basic formatting
+    const displayAmount = typeof formatAmount === 'function'
+        ? formatAmount(entry.amount, entry.currency)
+        : `${entry.amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 'N/A'} ${entry.currency || ''}`;
 
-// NOTE: Local getStatusClass definition REMOVED
+    // --- Details from rawData (with safe access) ---
+    const raw = entry.rawData || {}; // Use empty object as fallback
+    const destinationInfo = raw.destination_counterparty_info || {};
+    const sourceInfo = raw.payment_source || {};
+    const paymentInfo = raw.payment_info || {};
 
-// --- Component to display Payment History Details ---
-const PaymentHistoryDetailModal = ({ entry, onClose }) => {
-  // Don't render anything if no entry is selected
-  if (!entry) return null;
+    const sourceAccountDisplay = raw._ui_sender_account_label || sourceInfo.account_id || 'N/A';
+    const sendingEntity = sourceInfo.entity || 'N/A';
+    const destAccount = destinationInfo.accountIdentifier || 'N/A';
+    const destInstitution = destinationInfo.institution || 'N/A';
+    // Combine recipient name from top-level entry or rawData if needed
+    const recipientNameDisplay = entry.recipient || destinationInfo.name || 'N/A';
 
-  // Local helper function REMOVED
+    // Determine Network/Rail based on payment type hint or available fields
+    let networkOrRail = raw._ui_onchain_network || paymentInfo.onChainNetwork || 'N/A';
+    if (networkOrRail === 'N/A') {
+        networkOrRail = raw.traditionalRail || paymentInfo.traditionalRail || 'N/A'; // Check for traditional rail
+    }
+    const networkOrRailLabel = (raw._ui_onchain_network || paymentInfo.onChainNetwork) ? 'Network' : 'Rail'; // Adjust label
 
-  // Format timestamp safely, providing a fallback
-  const formattedTimestamp = entry.timestamp
-    ? new Date(entry.timestamp).toLocaleString()
-    : 'N/A';
+    const purposeCode = paymentInfo.purpose || raw.purposeCode || 'N/A'; // Use purposeCode from payment_info first
+    const paymentDescription = paymentInfo.description || null; // The field you identified
 
-  // Format amount safely, checking if it's a number
-  const formattedAmount = (typeof entry.amount === 'number')
-    ? entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) // Standard formatting for numbers
-    : entry.amount || 'N/A'; // Display as is if not a number, or N/A
+    // Fees and Total Debit
+    const networkFeeDisplay = raw._ui_network_fee_display || (raw._simulated_network_fee ? `${raw._simulated_network_fee.toFixed(8)} (Simulated)` : 'N/A');
+    // Use formatAmount for total debit if possible, requires currency context potentially
+    const totalDebit = raw._simulated_total_debit;
+    const formattedTotalDebit = typeof totalDebit === 'number' ? totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+    // Attempt to get currency for total debit (might be same as payment currency or different if fees are involved)
+    const sourceCurrency = assets.find(a => a.id === sourceInfo.account_id)?.symbol || entry.currency || '';
 
 
-  return (
-    // Modal backdrop
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-      {/* Modal Content Box */}
-      <div className="relative bg-white p-6 border w-full max-w-lg mx-auto shadow-lg rounded-md">
-        {/* Modal Header */}
-        <div className="flex justify-between items-center mb-4 border-b pb-2">
-          <h3 className="text-lg font-medium leading-6 text-gray-900">Payment History Details</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none focus:outline-none"
-            aria-label="Close modal"
-          >
-            &times;
-          </button>
-        </div>
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 animate-fade-in">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto flex flex-col">
+                {/* Header */}
+                <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+                    <h2 className="text-xl font-bold text-gray-800">Payment Details</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-3xl leading-none">&times;</button>
+                </div>
 
-        {/* Modal Body - Displaying Entry Details */}
-        <div className="space-y-3 text-sm">
-           {/* Using definition list for better structure */}
-           <dl className="grid grid-cols-3 gap-x-2 gap-y-2">
-                <dt className="col-span-1 text-gray-500">Timestamp:</dt>
-                <dd className="col-span-2">{formattedTimestamp}</dd>
+                {/* Body */}
+                <div className="p-6 space-y-4 text-sm overflow-y-auto flex-grow">
 
-                <dt className="col-span-1 text-gray-500">Type:</dt>
-                <dd className="col-span-2 font-medium">{entry.type || 'N/A'}</dd>
+                    {/* Basic Info Section */}
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-2 pb-3 border-b">
+                        <div className="text-gray-500">Timestamp</div>
+                        <div className="col-span-2 font-medium text-gray-800">{formattedTimestamp}</div>
 
-                <dt className="col-span-1 text-gray-500">Amount:</dt>
-                {/* Display currency only if amount is valid */}
-                <dd className="col-span-2">{formattedAmount} {entry.currency && formattedAmount !== 'N/A' ? entry.currency : ''}</dd>
+                        <div className="text-gray-500">Type</div>
+                        <div className="col-span-2 font-medium text-gray-800">{entry.type || 'N/A'}</div>
 
-                <dt className="col-span-1 text-gray-500">Recipient:</dt>
-                <dd className="col-span-2 break-words">{entry.recipient || 'N/A'}</dd>
+                        <div className="text-gray-500">Amount</div>
+                        <div className="col-span-2 font-medium text-gray-800">{displayAmount}</div>
 
-                <dt className="col-span-1 text-gray-500">Status:</dt>
-                <dd className="col-span-2">
-                    {/* USE IMPORTED HELPER */}
-                    <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${getStatusClass(entry.status)}`}>
-                        {entry.status || 'Unknown'}
-                    </span>
-                </dd>
+                        <div className="text-gray-500">Recipient</div>
+                        <div className="col-span-2 font-medium text-gray-800 truncate">{recipientNameDisplay}</div>
 
-                {entry.reference && ( // Conditionally show reference
-                   <>
-                    <dt className="col-span-1 text-gray-500">Reference:</dt>
-                    <dd className="col-span-2 text-xs text-gray-600 break-all">{entry.reference}</dd>
-                   </>
-                )}
+                        <div className="text-gray-500">Status</div>
+                        <div className="col-span-2">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}`}>
+                                {entry.status || 'Unknown'}
+                            </span>
+                        </div>
 
-                <dt className="col-span-1 text-gray-500 pt-2 border-t mt-2">Internal ID:</dt>
-                <dd className="col-span-2 text-xs text-gray-500 pt-2 border-t mt-2">{entry.id || 'N/A'}</dd>
-           </dl>
-          {/* Display rawData if available and not null/empty object */}
-          {entry.rawData && typeof entry.rawData === 'object' && Object.keys(entry.rawData).length > 0 && (
-            <div className="mt-4 pt-3 border-t">
-                <p className="font-medium text-gray-700 mb-1">Raw Data:</p>
-                <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-40 border border-gray-200">
-                    {JSON.stringify(entry.rawData, null, 2)}
-                </pre>
+                        <div className="text-gray-500">Reference</div>
+                        <div className="col-span-2 font-medium text-gray-800 text-xs break-all">{entry.reference || 'N/A'}</div>
+
+                        <div className="text-gray-500">Internal ID</div>
+                        <div className="col-span-2 font-medium text-gray-800 text-xs break-all">{entry.id || 'N/A'}</div>
+                    </div>
+
+                    {/* Details Section */}
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-2 pt-3 pb-3 border-b">
+                         <div className="text-gray-500">Source Account</div>
+                         <div className="col-span-2 font-medium text-gray-800">{sourceAccountDisplay}</div>
+
+                         <div className="text-gray-500">Sending Entity</div>
+                         <div className="col-span-2 font-medium text-gray-800">{sendingEntity}</div>
+
+                         <div className="text-gray-500">Destination Acct</div>
+                         <div className="col-span-2 font-medium text-gray-800 break-all">{destAccount}</div>
+
+                         <div className="text-gray-500">Destination Inst.</div>
+                         <div className="col-span-2 font-medium text-gray-800">{destInstitution}</div>
+
+                         {networkOrRail !== 'N/A' && (
+                             <>
+                                <div className="text-gray-500">{networkOrRailLabel}</div>
+                                <div className="col-span-2 font-medium text-gray-800">{networkOrRail}</div>
+                             </>
+                         )}
+
+                         <div className="text-gray-500">Purpose Code</div>
+                         <div className="col-span-2 font-medium text-gray-800">{purposeCode}</div>
+
+                         {networkFeeDisplay !== 'N/A' && (
+                             <>
+                                <div className="text-gray-500">Network Fee</div>
+                                <div className="col-span-2 font-medium text-gray-800">{networkFeeDisplay}</div>
+                             </>
+                         )}
+                         {formattedTotalDebit !== 'N/A' && (
+                              <>
+                                <div className="text-gray-500">Total Debit</div>
+                                <div className="col-span-2 font-medium text-gray-800">{formattedTotalDebit} {sourceCurrency}</div>
+                              </>
+                         )}
+                    </div>
+
+                    {/* Payment Description (Note) Section */}
+                    {paymentDescription && (
+                         <div className="pt-3">
+                            <h3 className="text-gray-600 font-semibold mb-1">Payment Description</h3>
+                            <p className="font-medium bg-gray-50 p-3 border rounded text-gray-800 whitespace-pre-wrap break-words">
+                                {paymentDescription}
+                            </p>
+                         </div>
+                     )}
+
+                     {/* Raw Data section removed as requested */}
+
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end items-center p-4 border-t sticky bottom-0 bg-gray-50 z-10">
+                    <button onClick={onClose} className="px-4 py-2 rounded text-sm bg-gray-600 hover:bg-gray-700 text-white">Close</button>
+                </div>
             </div>
-          )}
         </div>
-
-        {/* Modal Footer - Close Button */}
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            className="px-4 py-2 bg-gray-200 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default PaymentHistoryDetailModal;
