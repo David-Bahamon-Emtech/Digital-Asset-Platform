@@ -1,15 +1,12 @@
 // src/features/Payments/ViewTransferDetailsScreen.js
+// Assuming this file lives directly under src/features/Payments/
 import React from 'react';
 
-// Helper to format currency based on symbol
-const formatAmount = (amount, currency) => {
-    try {
-        return amount.toLocaleString(undefined, { style: 'currency', currency: currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    } catch (e) {
-        // Fallback for unknown currency codes
-        return `${amount.toLocaleString()} ${currency}`;
-    }
-};
+// --- Import centralized utilities ---
+// Adjust path if utils is elsewhere relative to features/Payments
+import { formatAmount, getStatusClass } from '../../utils/displayUtils'; // IMPORTED
+
+// NOTE: Local formatAmount and getStatusColor definitions REMOVED
 
 // --- Component to display HVT details ---
 const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
@@ -18,7 +15,7 @@ const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
   if (!transfer) {
     return (
       <div className="bg-white p-6 rounded shadow max-w-4xl mx-auto text-center">
-        <p className="text-red-600 mb-4">Could not load transfer details.</p>
+        <p className="text-red-600 mb-4">Could not load transfer details or details are missing.</p>
         <button className="px-3 py-1 rounded text-white hover:opacity-90 bg-gray-800 text-sm" onClick={onBack}>
           Back
         </button>
@@ -26,16 +23,7 @@ const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
     );
   }
 
-  // Determine status color
-  const getStatusColor = (status) => {
-    switch (status) {
-        case 'Completed':
-        case 'Authorized': return 'text-green-700 bg-green-100';
-        case 'Pending': return 'text-yellow-800 bg-yellow-100';
-        case 'Rejected': return 'text-red-700 bg-red-100';
-        default: return 'text-gray-700 bg-gray-100';
-    }
-  };
+  // Local helper functions REMOVED
 
   return (
     <div className="bg-white p-6 rounded shadow max-w-4xl mx-auto">
@@ -48,17 +36,25 @@ const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
       </div>
 
       {/* Details Section */}
+      {/* Use optional chaining '?' and nullish coalescing '??' for safer access */}
       <div className='p-4 border rounded bg-gray-50 mb-6 space-y-3 text-sm'>
         <h3 className="font-semibold text-base mb-3 border-b pb-2 text-gray-800">Summary</h3>
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
 
             <dt className="text-gray-500">Reference ID:</dt>
-            <dd className="font-medium">{transfer.id}</dd>
+            {/* Display history ID, fallback to reference */}
+            <dd className="font-medium">{transfer.id ?? transfer.reference ?? 'N/A'}</dd>
 
             <dt className="text-gray-500">Status:</dt>
-            <dd><span className={`px-2 py-0.5 text-xs rounded-full font-medium ${getStatusColor(transfer.status)}`}>{transfer.status}</span></dd>
+            <dd>
+                {/* USE IMPORTED HELPER */}
+                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${getStatusClass(transfer.status)}`}>
+                    {transfer.status || 'Unknown'}
+                </span>
+            </dd>
 
-            {transfer.rejectionReason && (
+            {/* Display rejection reason if status is Rejected and reason exists */}
+            {transfer.status === 'Rejected' && transfer.rejectionReason && (
                  <>
                     <dt className="text-red-500">Rejection Reason:</dt>
                     <dd className="text-red-700">{transfer.rejectionReason}</dd>
@@ -67,26 +63,35 @@ const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
 
             <div className="md:col-span-2 font-medium text-gray-700 border-b pb-1 mb-1 mt-2 text-base">Amount</div>
             <dt className="text-gray-500">Amount:</dt>
-            <dd className="font-semibold text-lg">{formatAmount(transfer.amount, transfer.currency)}</dd>
+            {/* USE IMPORTED HELPER */}
+            {/* Use nullish coalescing for amount */}
+            <dd className="font-semibold text-lg">{formatAmount(transfer.amount ?? 0, transfer.currency || 'N/A')}</dd>
+
+            {/* Display approx USD only if it exists and currency is not USD */}
             {transfer.approxUSD && transfer.currency !== 'USD' && (
                 <>
                     <dt className="text-gray-500">Approx. USD Value:</dt>
-                    <dd className="text-gray-600">${transfer.approxUSD.toLocaleString()}</dd>
+                    <dd className="text-gray-600">${(transfer.approxUSD ?? 0).toLocaleString()}</dd>
                 </>
             )}
 
              <div className="md:col-span-2 font-medium text-gray-700 border-b pb-1 mb-1 mt-2 text-base">Parties</div>
              <dt className="text-gray-500">Recipient Name:</dt>
-             <dd>{transfer.recipient}</dd>
+             <dd>{transfer.recipient ?? 'N/A'}</dd>
 
-             {/* Add From Account/Entity if available in transfer object */}
-             {/* <dt className="text-gray-500">From Account:</dt> <dd>{transfer.fromAccount || 'N/A'}</dd> */}
+             {/* Added safety check for From Account/Entity */}
+             {transfer.fromAccountLabel &&
+                <> <dt className="text-gray-500">From Account:</dt> <dd>{transfer.fromAccountLabel} ({transfer.fromAccountSymbol || ''})</dd> </>
+             }
+              {transfer.senderEntity &&
+                <> <dt className="text-gray-500">From Entity:</dt> <dd>{transfer.senderEntity}</dd> </>
+             }
 
              <dt className="text-gray-500">Recipient Account:</dt>
-             <dd className="break-all">{transfer.recipientAccount || 'N/A'}</dd>
+             <dd className="break-all">{transfer.recipientAccount ?? 'N/A'}</dd>
 
              <dt className="text-gray-500">Recipient Bank (SWIFT):</dt>
-             <dd>{transfer.recipientBankSwift || 'N/A'}</dd>
+             <dd>{transfer.recipientBankSwift ?? 'N/A'}</dd>
 
              {transfer.intermediaryBankSwift && (
                <>
@@ -97,7 +102,7 @@ const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
 
              <div className="md:col-span-2 font-medium text-gray-700 border-b pb-1 mb-1 mt-2 text-base">Execution Details</div>
              <dt className="text-gray-500">Purpose Code:</dt>
-             <dd>{transfer.purposeCode || transfer.purpose || 'N/A'}</dd>
+             <dd>{transfer.purpose ?? 'N/A'}</dd> {/* Use purpose field directly */}
 
              <dt className="text-gray-500">Value Date:</dt>
              <dd>{transfer.valueDate ? new Date(transfer.valueDate).toLocaleDateString() : 'N/A'}</dd>
@@ -107,26 +112,31 @@ const ViewTransferDetailsScreen = ({ transfer, onBack }) => {
 
              <div className="md:col-span-2 font-medium text-gray-700 border-b pb-1 mb-1 mt-2 text-base">History & Audit</div>
              <dt className="text-gray-500">Initiated by:</dt>
-             <dd>{transfer.initiatedBy}</dd>
+             <dd>{transfer.initiatedBy ?? 'N/A'}</dd>
 
              <dt className="text-gray-500">Initiated on:</dt>
-             <dd>{new Date(transfer.initiatedDate).toLocaleString()}</dd>
+             <dd>{transfer.initiatedDate ? new Date(transfer.initiatedDate).toLocaleString() : 'N/A'}</dd>
 
-            {/* Placeholder for Approval History */}
-             <dt className="text-gray-500">Approvals:</dt>
-             <dd>{transfer.approvalsCompleted} of {transfer.approvalsRequired} required ({transfer.status})</dd>
+            {/* Display approval info if available */}
+             { (typeof transfer.approvalsCompleted === 'number' && typeof transfer.approvalsRequired === 'number') &&
+                <>
+                    <dt className="text-gray-500">Approvals:</dt>
+                    <dd>{transfer.approvalsCompleted} of {transfer.approvalsRequired} required</dd>
+                </>
+             }
 
         </dl>
       </div>
 
         {/* Potential Action Buttons (e.g., Recall Request - Placeholder) */}
-        {transfer.status === 'Pending' && (
+        {/* Logic for showing actions could be more complex based on status */}
+        {(transfer.status === 'Pending' || transfer.status === 'Pending Approval' || transfer.status === 'Authorized') && ( // Maybe allow recall if Authorized but not Completed?
              <div className="mt-6 flex justify-end space-x-3">
-                 <button className="px-4 py-2 rounded border border-gray-300 text-sm hover:bg-gray-50">Request Recall</button>
+                 <button className="px-4 py-2 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-50" disabled>Request Recall</button>
              </div>
         )}
 
-    </div>
+    </div> // End main container
   );
 };
 
