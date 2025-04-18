@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-bg: #2f3b49; /* Dark blue-gray from original code/image */
+  --sidebar-text: #FFFFFF; /* White text */
+  --sidebar-highlight-bg: #4A5568; /* A slightly lighter gray for hover/active */
+  --sidebar-highlight-text: #FFFFFF;
+  --emtech-gold: #C9A14F; /* Gold color */
+}
+
+/* Example of how you might define another theme later */
+/*
+.theme-bank-a {
+  --sidebar-bg: #00447C;
+  --sidebar-text: #FFFFFF;
+  --sidebar-highlight-bg: #005A9E;
+  --sidebar-highlight-text: #FFFFFF;
+  --emtech-gold: #FDB913;
+}
+*/
