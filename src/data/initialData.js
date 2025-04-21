@@ -1,5 +1,6 @@
 /**
  * Initial list of institutional digital assets managed by the platform.
+ * BALANCES ADJUSTED TO REFLECT SPREAD-OUT HISTORY & >=10% RESERVE TARGET
  */
 export const initialInstitutionalAssets = [
   // --- Digital Assets (Warm/Hot) ---
@@ -11,21 +12,19 @@ export const initialInstitutionalAssets = [
   { id: 'eth-warm', label: 'Ethereum Operational Wallet', balance: 2000, symbol: 'ETH', description: 'Operational ETH for gas fees and trading.', supply: 'Finite', blockchain: 'Ethereum', isWizardIssued: false, isInstitutional: true, assetClass: 'CryptoCurrency', physicality: 'Digital', custodyType: 'Warm', price: 3500.00 },
   { id: 'matic-hot', label: 'Polygon Hot Wallet', balance: 500000, symbol: 'MATIC', description: 'MATIC for Polygon operations.', supply: 'Finite', blockchain: 'Polygon', isWizardIssued: false, isInstitutional: true, assetClass: 'CryptoCurrency', physicality: 'Digital', custodyType: 'Hot', price: 0.95 },
 
-  // --- NEW Predefined Tokenized Assets ---
-  { id: 'cp-acme-01', label: 'Tokenized CP (Acme)', balance: 45000000, totalSupplyIssued: 50000000, symbol: 'ACP', description: 'Tokenized Commercial Paper issued by Acme Corp.', supply: 'Finite', blockchain: 'Polygon', isWizardIssued: false, isInstitutional: true, assetClass: 'Security-CP', physicality: 'Digital', custodyType: 'Warm', price: 0.998 },
-  { id: 'mmf-usd-01', label: 'Tokenized MMF (USD)', balance: 240500000, totalSupplyIssued: 250000000, symbol: 'MMFUSD', description: 'Tokenized shares in a USD Money Market Fund.', supply: 'Finite', blockchain: 'Ethereum', isWizardIssued: false, isInstitutional: true, assetClass: 'Security-MMF', physicality: 'Digital', custodyType: 'Warm', price: 1.00 },
-  { id: 'xagc-01', label: 'Silver-Backed Coin', balance: 850000, totalSupplyIssued: 1000000, symbol: 'XAGC', description: 'Digital coin backed by physical silver reserves.', supply: 'Finite', blockchain: 'Stellar', isWizardIssued: false, isInstitutional: true, assetClass: 'Commodity-PreciousMetal', physicality: 'Digital', custodyType: 'Cold', price: 30.50 },
-  { id: 'oil-wti-01', label: 'Tokenized WTI Oil', balance: 480000, totalSupplyIssued: 500000, symbol: 'WTOIL', description: 'Token representing one barrel of WTI crude oil.', supply: 'Finite', blockchain: 'Polygon', isWizardIssued: false, isInstitutional: true, assetClass: 'Commodity-Energy', physicality: 'Digital', custodyType: 'Warm', price: 80.15 },
-  { id: 'cc-verra-01', label: 'Verified Carbon Credit', balance: 9500000, totalSupplyIssued: 10000000, symbol: 'VCC', description: 'Tokenized Verra-certified carbon credit (1 token = 1 tonne CO2e).', supply: 'Finite', blockchain: 'Hedera', isWizardIssued: false, isInstitutional: true, assetClass: 'CarbonCredit', physicality: 'Digital', custodyType: 'Warm', price: 15.75 },
+  // --- NEW Predefined Tokenized Assets (Balances Adjusted for Reserve Target) ---
+  { id: 'cp-acme-01', label: 'Tokenized CP (Acme)', balance: 44300000, totalSupplyIssued: 50000000, symbol: 'ACP', description: 'Tokenized Commercial Paper issued by Acme Corp.', supply: 'Finite', blockchain: 'Polygon', isWizardIssued: false, isInstitutional: true, assetClass: 'Security-CP', physicality: 'Digital', custodyType: 'Warm', price: 0.998 }, // Bal: 44.3M (Reserve: 11.4%)
+  { id: 'mmf-usd-01', label: 'Tokenized MMF (USD)', balance: 225000000, totalSupplyIssued: 250000000, symbol: 'MMFUSD', description: 'Tokenized shares in a USD Money Market Fund.', supply: 'Finite', blockchain: 'Ethereum', isWizardIssued: false, isInstitutional: true, assetClass: 'Security-MMF', physicality: 'Digital', custodyType: 'Warm', price: 1.00 }, // Bal: 225M (Reserve: 10.0%) - Adjusted
+  { id: 'xagc-01', label: 'Silver-Backed Coin', balance: 900000, totalSupplyIssued: 1000000, symbol: 'XAGC', description: 'Digital coin backed by physical silver reserves.', supply: 'Finite', blockchain: 'Stellar', isWizardIssued: false, isInstitutional: true, assetClass: 'Commodity-PreciousMetal', physicality: 'Digital', custodyType: 'Cold', price: 30.50 }, // Bal: 900k (Reserve: 10.0%)
+  { id: 'oil-wti-01', label: 'Tokenized WTI Oil', balance: 450000, totalSupplyIssued: 500000, symbol: 'WTOIL', description: 'Token representing one barrel of WTI crude oil.', supply: 'Finite', blockchain: 'Polygon', isWizardIssued: false, isInstitutional: true, assetClass: 'Commodity-Energy', physicality: 'Digital', custodyType: 'Warm', price: 80.15 }, // Bal: 450k (Reserve: 10.0%) - Adjusted
+  { id: 'cc-verra-01', label: 'Verified Carbon Credit', balance: 9000000, totalSupplyIssued: 10000000, symbol: 'VCC', description: 'Tokenized Verra-certified carbon credit (1 token = 1 tonne CO2e).', supply: 'Finite', blockchain: 'Hedera', isWizardIssued: false, isInstitutional: true, assetClass: 'CarbonCredit', physicality: 'Digital', custodyType: 'Warm', price: 15.75 }, // Bal: 9M (Reserve: 10.0%) - Adjusted
 
   // --- Cold Storage Examples ---
    { id: 'btc-cold-01', label: 'Bitcoin Cold Storage 1', balance: 500, symbol: 'BTC', description: 'Institution Bitcoin reserves held in cold storage.', supply: 'Finite', blockchain: 'Bitcoin', isWizardIssued: false, isInstitutional: true, assetClass: 'CryptoCurrency', physicality: 'Digital', custodyType: 'Cold', price: 65000.00 },
-   // ... other cold storage assets ...
    { id: 'aave-cold', label: 'Aave Cold Storage', balance: 10000, symbol: 'AAVE', description: 'AAVE governance tokens in cold storage.', supply: 'Finite', blockchain: 'Ethereum', isWizardIssued: false, isInstitutional: true, assetClass: 'CryptoCurrency', physicality: 'Digital', custodyType: 'Cold', price: 110.00 },
 
   // --- Physical Vault Examples ---
    { id: 'phys-gold-zur', label: 'Physical Gold Zurich', balance: 1000, symbol: 'XAU', description: 'Gold bullion held in Zurich vault.', supply: 'N/A', blockchain: 'N/A', isWizardIssued: false, isInstitutional: true, assetClass: 'Commodity-PreciousMetal', physicality: 'Physical', custodyType: 'PhysicalVault', price: 75000 },
-   // ... other physical assets ...
    { id: 'phys-whiskey', label: 'Aged Whiskey Cask #42', balance: 1, symbol: 'WHISK-C42', description: 'Physically stored cask of whiskey.', supply: 'N/A', blockchain: 'N/A', isWizardIssued: false, isInstitutional: true, assetClass: 'Commodity-Other', physicality: 'Physical', custodyType: 'PhysicalVault', price: 150000 },
 
   // --- Standard Fiat Accounts (External) ---
@@ -33,10 +32,8 @@ export const initialInstitutionalAssets = [
   { id: 'inst-eur-primary', label: 'EUR Primary Account', balance: 15000000000, symbol: 'EUR', description: 'Main operational EUR account.', supply: 'N/A', blockchain: 'N/A', isWizardIssued: false, isInstitutional: true, assetClass: 'FiatCurrency', physicality: 'Digital', custodyType: 'External', price: 1.08 },
 ];
 
-/**
- * Mapping of asset symbols/IDs to their logo image paths.
- */
-export const assetLogos = {
+// --- Asset Logos (Unchanged) ---
+export const assetLogos = { /* ... content unchanged ... */
   // Institutional assets (Treasury)
   'usdc': '/logos/circle.png',
   'usdt': '/logos/tether.svg',
@@ -85,10 +82,8 @@ export const assetLogos = {
   'DEFAULT': '/logos/generic-bank.png'
 };
 
-/**
- * Mapping of blockchain names to their logo image paths.
- */
-export const blockchainLogos = {
+// --- Blockchain Logos (Unchanged) ---
+export const blockchainLogos = { /* ... content unchanged ... */
   'Stellar': '/logos/stellar.png',
   'Ethereum': '/logos/ethereum.png',
   'Polygon': '/logos/polygon.png',
@@ -102,17 +97,11 @@ export const blockchainLogos = {
   'N/A': null
 };
 
-/**
- * Sample entities list. Used in payment forms.
- */
+// --- Sample Entities (Unchanged) ---
 export const sampleEntities = ['Citi New York', 'Citi London', 'Citi Singapore', 'Citi Mumbai'];
 
-
-/**
- * Hardcoded details for PREDEFINED assets.
- * Moved here from TokenDashboard.js for shared access.
- */
-export const hardcodedAssetDetails = {
+// --- Hardcoded Asset Details (Unchanged) ---
+export const hardcodedAssetDetails = { /* ... content unchanged ... */
   // Treasury Assets (needed if Treasury detail view uses this)
   'usdc': { officialName: 'USD Coin', issuer: 'Circle Internet Financial', website: 'https://www.circle.com/en/usdc', assetType: 'Fiat-backed Stablecoin', reserveInfo: 'Backed by cash and short-duration U.S. Treasuries, attested monthly.', features: ['Pausable by issuer', 'Regulated', 'KYC/AML required'], },
   'usdt': { officialName: 'Tether', issuer: 'Tether Operations Limited', website: 'https://tether.to/', assetType: 'Fiat-backed Stablecoin', reserveInfo: 'Backed by various assets including cash, equivalents, secured loans, bonds, and other investments. Attested regularly.', features: ['Pausable by issuer', 'Regulated (varies by jurisdiction)'], },
@@ -161,7 +150,6 @@ export const hardcodedAssetDetails = {
     reserveInfo: 'Represents one tonne of verified CO2e reduction/removal registered with Verra.',
     features: ['Verified Offset', 'Tradeable', 'Retirable for Climate Claims'],
   },
-  // Add details for any other predefined assets if needed
 };
 
 // Add other globally relevant initial data here if necessary

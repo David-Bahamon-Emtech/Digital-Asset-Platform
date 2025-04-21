@@ -1,28 +1,83 @@
 import React, { createContext, useContext, useReducer } from 'react';
 import { generateDummyClientAccounts } from '../utils/dummyData';
 import { initialInstitutionalAssets } from '../data/initialData';
+import { detailedDummyReserveData } from '../utils/metricsData.js'; // Adjust path if needed
 
-const initialClientAccounts = generateDummyClientAccounts(30);
-const combinedInitialAccounts = [
-    ...initialInstitutionalAssets,
-    ...initialClientAccounts
-];
-
-const initialAssetsState = {
-    assets: combinedInitialAccounts,
+// Helper function to safely parse balance strings
+const parseBalance = (balanceStr) => {
+    if (typeof balanceStr === 'number') { return balanceStr; }
+    if (typeof balanceStr !== 'string') { return null; }
+    const cleanedStr = balanceStr
+        .replace(/,/g, '')
+        .replace(/USD|Shares|Kg|Barrels|VCUs|Units|Tokens/i, '')
+        .trim();
+    const num = parseFloat(cleanedStr);
+    return isNaN(num) ? null : num;
 };
 
+// --- Create Initial State ---
+const processedInstitutionalAssets = initialInstitutionalAssets.map(asset => {
+    const reserveDataDetails = detailedDummyReserveData[asset.id];
+    if (reserveDataDetails) {
+        let processedAccounts = [];
+        if (Array.isArray(reserveDataDetails.accounts)) {
+            processedAccounts = reserveDataDetails.accounts.map(acc => ({
+                ...acc,
+                numericBalance: parseBalance(acc.balance),
+                originalBalanceStr: acc.balance
+            }));
+        }
+        const reserveData = {
+            ratio: reserveDataDetails.ratio,
+            requirement: reserveDataDetails.requirement,
+            lastAudit: reserveDataDetails.lastAudit,
+            auditor: reserveDataDetails.auditor,
+            composition: reserveDataDetails.composition || [],
+            accounts: processedAccounts
+        };
+        return { ...asset, reserveData: reserveData };
+    } else {
+        return asset;
+    }
+});
+
+const initialClientAccounts = generateDummyClientAccounts(30);
+const combinedInitialAccounts = [...processedInstitutionalAssets, ...initialClientAccounts];
+const initialAssetsState = { assets: combinedInitialAccounts };
+
+// --- Reducer function to manage asset state ---
 const assetsReducer = (state, action) => {
     switch (action.type) {
-        case 'ADD_ASSET':
+        case 'ADD_ASSET': {
             if (state.assets.some(asset => asset.id === action.payload.id || asset.symbol === action.payload.symbol)) {
                 console.warn(`Asset with ID ${action.payload.id} or Symbol ${action.payload.symbol} already exists.`);
                 return state;
             }
-            return {
-                ...state,
-                assets: [...state.assets, action.payload],
-            };
+            const newAssetPayload = { ...action.payload };
+            if (newAssetPayload.isWizardIssued && newAssetPayload.wizardData?.reserveDetails?.isBackedAsset) {
+                newAssetPayload.reserveData = {
+                    ratio: 100,
+                    requirement: 100,
+                    lastAudit: 'N/A (User Issued)',
+                    auditor: 'Self-Attested',
+                    composition: [{
+                        name: `User Defined Backing (${newAssetPayload.wizardData?.reserveDetails?.backingType || 'Unknown'})`,
+                        percent: 100.0
+                    }],
+                    accounts: [{
+                        institution: 'Backing Mechanism',
+                        type: newAssetPayload.wizardData?.reserveDetails?.backingType || 'Unknown',
+                        balance: `Initial: ${newAssetPayload.totalSupplyIssued || 'N/A'}`,
+                        numericBalance: newAssetPayload.totalSupplyIssued || 0,
+                        originalBalanceStr: `Initial: ${newAssetPayload.totalSupplyIssued || 'N/A'}`,
+                        updated: new Date().toLocaleDateString(),
+                        status: 'Configured'
+                    }]
+                };
+            }
+            return { ...state, assets: [...state.assets, newAssetPayload] };
+        }
+
         case 'UPDATE_ASSET_BALANCE': {
             const { assetId, changeAmount } = action.payload;
             if (!assetId || typeof changeAmount !== 'number' || isNaN(changeAmount)) {
@@ -31,22 +86,183 @@ const assetsReducer = (state, action) => {
             }
             const updatedAssets = state.assets.map(asset => {
                 if (asset.id === assetId) {
-                    const newBalance = Math.max(0, asset.balance + changeAmount);
+                    const newBalance = Math.max(0, (asset.balance || 0) + changeAmount);
+                    console.log(`Updating balance for ${asset.symbol}: ${asset.balance} -> ${newBalance} (Change: ${changeAmount})`);
                     return { ...asset, balance: newBalance };
                 }
                 return asset;
             });
-            return {
-                ...state,
-                assets: updatedAssets,
-            };
+            return { ...state, assets: updatedAssets };
         }
+
+        // *** MINT_ASSET: Corrected - ONLY updates totalSupplyIssued and reserve account ***
+        case 'MINT_ASSET': {
+            const { assetId, amount } = action.payload;
+            if (!assetId || typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+                console.error('Invalid payload for MINT_ASSET:', action.payload);
+                return state;
+            }
+
+            const updatedAssets = state.assets.map(asset => {
+                if (asset.id === assetId) {
+                    // *** Keep current balance (circulation) unchanged ***
+                    const newBalance = asset.balance || 0;
+                    let newTotalSupplyIssued = asset.totalSupplyIssued;
+                    let updatedReserveData = asset.reserveData ? { ...asset.reserveData } : undefined;
+
+                    // Increase total issued supply ONLY if supply is finite
+                    if (asset.supply === 'Finite') {
+                        newTotalSupplyIssued = (asset.totalSupplyIssued || 0) + amount;
+
+                        // Update reserve account balance
+                        if (updatedReserveData?.accounts?.length > 0) {
+                            const currentReserveBalance = updatedReserveData.accounts[0].numericBalance ?? null;
+                            if (currentReserveBalance !== null) {
+                                const newReserveBalance = currentReserveBalance + amount;
+                                const updatedAccounts = updatedReserveData.accounts.map((acc, index) => {
+                                    if (index === 0) {
+                                        const newBalanceStr = newReserveBalance.toLocaleString() + (acc.originalBalanceStr?.match(/\s(.*)/)?.[0] || '');
+                                        return { ...acc, numericBalance: newReserveBalance, originalBalanceStr: newBalanceStr };
+                                    }
+                                    return acc;
+                                });
+                                updatedReserveData.accounts = updatedAccounts;
+                                console.log(`[MINT] Updated reserve account 0 balance for ${asset.symbol} to ${newReserveBalance}`);
+                            } else {
+                                console.warn(`[MINT] Could not parse reserve account 0 balance for ${asset.symbol}.`);
+                            }
+                        } else {
+                            console.warn(`[MINT] No reserve accounts found for finite asset ${asset.symbol}.`);
+                        }
+                    } else {
+                        console.log(`[MINT] Minting ${amount} ${asset.symbol} (Infinite Supply): Balance remains ${newBalance}`);
+                    }
+                    console.log(`Minting ${amount} ${asset.symbol}: Balance ${asset.balance} -> ${newBalance} (Unchanged), TotalIssued ${asset.totalSupplyIssued} -> ${newTotalSupplyIssued}`);
+                    // Return updated asset with UNCHANGED balance
+                    return { ...asset, balance: newBalance, totalSupplyIssued: newTotalSupplyIssued, reserveData: updatedReserveData };
+                }
+                return asset;
+            });
+            return { ...state, assets: updatedAssets };
+        }
+
+        // *** BURN_ASSET: Update reserve ONLY (don't change circulation) ***
+        case 'BURN_ASSET': {
+            const { assetId, amount } = action.payload;
+            if (!assetId || typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+                console.error('Invalid payload for BURN_ASSET:', action.payload);
+                return state;
+            }
+
+            const updatedAssets = state.assets.map(asset => {
+                if (asset.id === assetId) {
+                    if (asset.supply === 'Finite' && typeof asset.totalSupplyIssued === 'number') {
+                        // *** Keep balance (circulation) unchanged ***
+                        const newBalance = asset.balance || 0;
+                        // Only decrease total supply
+                        const newTotalSupplyIssued = Math.max(0, asset.totalSupplyIssued - amount);
+                        
+                        let updatedReserveData = asset.reserveData ? { ...asset.reserveData } : undefined;
+                        
+                        // Update reserve account balance
+                        if (updatedReserveData?.accounts?.length > 0) {
+                            const updatedAccounts = updatedReserveData.accounts.map((acc, index) => {
+                                if (index === 0) {
+                                    const currentReserveBalance = acc.numericBalance ?? null;
+                                    if (currentReserveBalance !== null) {
+                                        const newReserveBalance = Math.max(0, currentReserveBalance - amount);
+                                        const newBalanceStr = newReserveBalance.toLocaleString() + (acc.originalBalanceStr?.match(/\s(.*)/)?.[0] || '');
+                                        console.log(`[BURN] Updated reserve account 0 balance for ${asset.symbol} to ${newReserveBalance}`);
+                                        return { ...acc, numericBalance: newReserveBalance, originalBalanceStr: newBalanceStr };
+                                    } else {
+                                        console.warn(`[BURN] Could not parse reserve account 0 balance for ${asset.symbol}.`);
+                                    }
+                                }
+                                if (acc.type === 'Issuance Vehicle Ledger') {
+                                    const newSpvBalanceStr = newTotalSupplyIssued.toLocaleString() + (acc.originalBalanceStr?.match(/\s(.*)/)?.[0] || ` ${asset.symbol} Tokens`);
+                                    console.log(`[BURN] Updated SPV ledger balance for ${asset.symbol} to ${newTotalSupplyIssued}`);
+                                    return { ...acc, numericBalance: newTotalSupplyIssued, originalBalanceStr: newSpvBalanceStr };
+                                }
+                                return acc;
+                            });
+                            updatedReserveData.accounts = updatedAccounts;
+                        } else {
+                            console.warn(`[BURN] No reserve accounts found for finite asset ${asset.symbol}.`);
+                        }
+                        
+                        console.log(`Burning ${amount} ${asset.symbol}: Balance ${asset.balance} -> ${newBalance} (Unchanged), TotalIssued ${asset.totalSupplyIssued} -> ${newTotalSupplyIssued}`);
+                        
+                        // Return updated asset with UNCHANGED balance
+                        return { ...asset, balance: newBalance, totalSupplyIssued: newTotalSupplyIssued, reserveData: updatedReserveData };
+                    } else {
+                        console.warn(`Cannot burn asset ${asset.symbol} as supply is not Finite or totalSupplyIssued is invalid.`);
+                        return asset;
+                    }
+                }
+                return asset;
+            });
+            
+            return { ...state, assets: updatedAssets };
+        }
+
+        // *** NEW REDEEM_ASSET case: burns tokens on redemption ***
+        case 'REDEEM_ASSET': {
+            const { assetId, amount } = action.payload;
+            if (!assetId || typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+                console.error('Invalid payload for REDEEM_ASSET:', action.payload);
+                return state;
+            }
+
+            const updatedAssets = state.assets.map(asset => {
+                if (asset.id === assetId) {
+                    // Redemption burns tokens, so decrease both balance and total supply
+                    const newBalance = Math.max(0, (asset.balance || 0) - amount);
+                    let newTotalSupplyIssued = asset.totalSupplyIssued;
+                    let updatedReserveData = asset.reserveData ? { ...asset.reserveData } : undefined;
+
+                    // Only decrease total supply if supply is finite
+                    if (asset.supply === 'Finite' && typeof asset.totalSupplyIssued === 'number') {
+                        newTotalSupplyIssued = Math.max(0, asset.totalSupplyIssued - amount);
+
+                        // Update reserve account balance
+                        if (updatedReserveData?.accounts?.length > 0) {
+                            const updatedAccounts = updatedReserveData.accounts.map((acc, index) => {
+                                if (index === 0) {
+                                    const currentReserveBalance = acc.numericBalance ?? null;
+                                    if (currentReserveBalance !== null) {
+                                        const newReserveBalance = Math.max(0, currentReserveBalance - amount);
+                                        const newBalanceStr = newReserveBalance.toLocaleString() + (acc.originalBalanceStr?.match(/\s(.*)/)?.[0] || '');
+                                        console.log(`[REDEEM] Updated reserve account 0 balance for ${asset.symbol} to ${newReserveBalance}`);
+                                        return { ...acc, numericBalance: newReserveBalance, originalBalanceStr: newBalanceStr };
+                                    }
+                                }
+                                if (acc.type === 'Issuance Vehicle Ledger') {
+                                    const newSpvBalanceStr = newTotalSupplyIssued.toLocaleString() + (acc.originalBalanceStr?.match(/\s(.*)/)?.[0] || ` ${asset.symbol} Tokens`);
+                                    console.log(`[REDEEM] Updated SPV ledger balance for ${asset.symbol} to ${newTotalSupplyIssued}`);
+                                    return { ...acc, numericBalance: newTotalSupplyIssued, originalBalanceStr: newSpvBalanceStr };
+                                }
+                                return acc;
+                            });
+                            updatedReserveData.accounts = updatedAccounts;
+                        }
+                    }
+                    
+                    console.log(`Redeeming ${amount} ${asset.symbol}: Balance ${asset.balance} -> ${newBalance}, TotalIssued ${asset.totalSupplyIssued} -> ${newTotalSupplyIssued}`);
+                    
+                    return { ...asset, balance: newBalance, totalSupplyIssued: newTotalSupplyIssued, reserveData: updatedReserveData };
+                }
+                return asset;
+            });
+            
+            return { ...state, assets: updatedAssets };
+        }
+
         case 'UPDATE_ASSET_PROPERTY': {
             const { assetId, propertyName, propertyValue } = action.payload;
-             if (!assetId || !propertyName) {
-                 console.error('Invalid payload for UPDATE_ASSET_PROPERTY:', action.payload);
-                 return state;
-             }
+            if (!assetId || !propertyName) {
+                console.error('Invalid payload for UPDATE_ASSET_PROPERTY:', action.payload);
+                return state;
+            }
             return {
                 ...state,
                 assets: state.assets.map(asset =>
@@ -54,25 +270,26 @@ const assetsReducer = (state, action) => {
                 )
             };
         }
-        case 'SET_ASSETS':
-             if (!Array.isArray(action.payload)) {
-                  console.error('Invalid payload for SET_ASSETS: Payload must be an array.');
-                  return state;
-             }
-            return {
-                ...state,
-                assets: action.payload,
-            };
+
+        case 'SET_ASSETS': {
+            if (!Array.isArray(action.payload)) {
+                console.error('Invalid payload for SET_ASSETS: Payload must be an array.');
+                return state;
+            }
+            return { ...state, assets: action.payload };
+        }
+
         default:
             return state;
     }
 };
 
+// Create the context object
 const AssetsContext = createContext(initialAssetsState);
 
+// Provider component
 export const AssetsProvider = ({ children }) => {
     const [state, dispatchAssets] = useReducer(assetsReducer, initialAssetsState);
-
     return (
         <AssetsContext.Provider value={{ assets: state.assets, dispatchAssets }}>
             {children}
@@ -80,6 +297,7 @@ export const AssetsProvider = ({ children }) => {
     );
 };
 
+// Custom hook to use the assets context
 export const useAssets = () => {
     const context = useContext(AssetsContext);
     if (context === undefined) {

@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 // Import child components
 import RedeemTokenScreen from './RedeemTokenScreen';
+import SwapTokenScreen from './SwapTokenScreen';
 import AssetDetailView from '../TokenManagement/AssetDetailView';
-import AssetOrdersListView from './AssetOrdersListView'; // <-- Import new list view
-import CreateAssetOrderScreen from './CreateAssetOrderScreen'; // <-- Import new create screen
+import AssetOrdersListView from './AssetOrdersListView';
+import CreateAssetOrderScreen from './CreateAssetOrderScreen';
 // Import hooks for accessing context
 import { useAssets } from '../../context/AssetsContext';
 // Import helpers
@@ -15,8 +16,8 @@ import { hardcodedAssetDetails } from '../../data/initialData';
 const treasuryAssetIds = ['usdc', 'usdt', 'd-euro', 't-bond', 'e-cedi'];
 
 // --- Dummy Data for Asset Orders ---
-// (Keeping data definition here for now, can be moved later)
 const dummyAssetOrders = [
+    // ... (dummy data remains the same)
     { id: 'AO-001', timestamp: new Date(Date.now() - 86400000 * 2), type: 'Internal Transfer', assetSymbol: 'USDC', amount: 5000000, from: 'Warm Wallet', to: 'Cold Storage 1', status: 'Completed', requestedBy: 'TreasuryOps' },
     { id: 'AO-002', timestamp: new Date(Date.now() - 3600000 * 5), type: 'FX Conversion', assetSymbol: 'EUR', amount: 1000000, from: 'EUR Primary Acct', to: 'USD Primary Acct', status: 'Completed', requestedBy: 'FX Desk' },
     { id: 'AO-003', timestamp: new Date(Date.now() - 3600000 * 1), type: 'Purchase', assetSymbol: 'T-BOND', amount: 50000, from: 'USD Primary Acct', to: 'Tokenized Bond Vault', status: 'Pending Approval', requestedBy: 'PortfolioMgr' },
@@ -33,13 +34,13 @@ const dummyAssetOrders = [
  * @param {object} props.blockchainLogos - Map of blockchain names to logo paths.
  */
 const TreasuryDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
-  // State for navigation
+  // State for navigation: 'dashboard', 'redeem', 'swap', 'assetOrdersList', 'createAssetOrder', 'treasuryAssetDetail'
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedTreasuryAssetId, setSelectedTreasuryAssetId] = useState(null);
-  // State for asset orders data (using dummy data)
+  // State for asset orders data
   const [assetOrders, setAssetOrders] = useState(dummyAssetOrders);
 
-  // Get assets from context (used for detail view lookups)
+  // Get assets from context
   const { assets } = useAssets();
 
   console.log("Rendering TreasuryDashboard, currentView:", currentView);
@@ -68,7 +69,6 @@ const TreasuryDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
     setCurrentView('dashboard');
   };
 
-  // Specific handler for navigating back to the orders list from create screen
   const handleBackToOrdersList = () => {
     setCurrentView('assetOrdersList');
   };
@@ -76,32 +76,63 @@ const TreasuryDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
 
   // --- Render Functions for Different Views ---
 
-  // Render the main Treasury dashboard view (action cards & asset overview)
-  // This function remains mostly the same, just renders the main dash content
+  // Render the main Treasury dashboard view
   const renderDashboardView = () => (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">Treasury Management</h1>
-      {/* Action Card Section */}
+      {/* Action Card Section - UPDATED STYLING */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4 text-gray-700">Actions</h2>
+        {/* UPDATED: Applied same grid classes as the overview section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
            {/* Redeem Card */}
            <div className="bg-white p-4 rounded shadow">
-               <h2 className="font-bold border-b pb-2 mb-4 text-gray-800">Redeem / Swap</h2>
-               <p className="text-sm text-gray-600 mb-3">Redeem tokens for underlying assets or swap for other platform tokens.</p>
-               <button type="button" className="px-4 py-2 rounded text-white hover:opacity-90 bg-yellow-600" onClick={() => handleNavigate('redeem')} > Go to Redeem/Swap </button>
+               <h2 className="font-bold border-b pb-2 mb-4 text-gray-800">Redeem Token</h2>
+               <p className="text-sm text-gray-600 mb-3">Redeem platform-issued tokens for their underlying asset value (e.g., fiat, commodity units).</p>
+               <button
+                  type="button"
+                  // UPDATED: Button color class
+                  className="px-4 py-2 rounded text-white hover:opacity-90 bg-yellow-600 hover:bg-yellow-500" // Placeholder EMTECH Gold
+                  onClick={() => handleNavigate('redeem')}
+               >
+                 Go to Redeem
+               </button>
            </div>
+
+           {/* Swap Card */}
+           <div className="bg-white p-4 rounded shadow">
+               <h2 className="font-bold border-b pb-2 mb-4 text-gray-800">Swap Token</h2>
+               <p className="text-sm text-gray-600 mb-3">Swap between different platform tokens and core treasury assets (e.g., USDC, USDT, T-BOND).</p>
+               <button
+                  type="button"
+                  // UPDATED: Button color class
+                  className="px-4 py-2 rounded text-white hover:opacity-90 bg-yellow-600 hover:bg-yellow-500" // Placeholder EMTECH Gold
+                  onClick={() => handleNavigate('swap')}
+               >
+                 Go to Swap
+                </button>
+           </div>
+
            {/* Asset Order Card */}
             <div className="bg-white p-4 rounded shadow">
                <h2 className="font-bold border-b pb-2 mb-4 text-gray-800">Asset Orders</h2>
                <p className="text-sm text-gray-600 mb-3">View and manage internal asset transfers, FX conversions, and purchases/sales.</p>
-               <button type="button" className="px-4 py-2 rounded text-white hover:opacity-90 bg-yellow-600" onClick={() => handleNavigate('assetOrdersList')} > View Asset Orders </button>
+               <button
+                    type="button"
+                    // UPDATED: Button color class
+                    className="px-4 py-2 rounded text-white hover:opacity-90 bg-yellow-600 hover:bg-yellow-500" // Placeholder EMTECH Gold
+                    onClick={() => handleNavigate('assetOrdersList')}
+               >
+                 View Asset Orders
+               </button>
            </div>
+           {/* Add more action cards here if needed, they will follow the grid */}
         </div>
       </div>
       {/* Treasury Assets Overview Section */}
       <div>
         <h2 className="text-xl font-semibold mb-4 text-gray-700">Treasury Assets Overview</h2>
+        {/* This section already uses the target grid classes */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {treasuryAssets.length > 0 ? treasuryAssets.map(asset => (
             <div key={asset.id} className="bg-white p-4 rounded shadow flex flex-col border border-gray-200 cursor-pointer hover:shadow-lg hover:border-gray-400 transition-all" onClick={() => handleTreasuryAssetCardClick(asset.id)} >
@@ -120,19 +151,24 @@ const TreasuryDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
     </div>
   );
 
-  // --- Removed renderAssetOrdersListView function ---
-  // --- Removed renderCreateAssetOrderView function ---
-
-
   // --- Main Return: Use conditional rendering to show the correct component ---
+  // (No changes needed in this part)
   return (
     <>
+      {/* Main Dashboard View */}
       {currentView === 'dashboard' && renderDashboardView()}
 
+      {/* Redeem Token View */}
       {currentView === 'redeem' && (
         <RedeemTokenScreen onBack={handleBackToTreasuryDashboard} />
       )}
 
+      {/* Swap Token View */}
+      {currentView === 'swap' && (
+        <SwapTokenScreen onBack={handleBackToTreasuryDashboard} />
+      )}
+
+      {/* Treasury Asset Detail View */}
       {currentView === 'treasuryAssetDetail' && selectedTreasuryAssetId && (
         (() => {
           const selectedAsset = Array.isArray(assets) ? assets.find(asset => asset.id === selectedTreasuryAssetId) : null;
@@ -141,7 +177,7 @@ const TreasuryDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
         })()
       )}
 
-      {/* Render Asset Orders List View Component */}
+      {/* Asset Orders List View */}
       {currentView === 'assetOrdersList' && (
         <AssetOrdersListView
             assetOrders={assetOrders} // Pass the orders data
@@ -150,7 +186,7 @@ const TreasuryDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
         />
       )}
 
-      {/* Render Create Asset Order Screen Component */}
+      {/* Create Asset Order View */}
       {currentView === 'createAssetOrder' && (
         <CreateAssetOrderScreen
             onBack={handleBackToOrdersList} // Function to go back to the list view
