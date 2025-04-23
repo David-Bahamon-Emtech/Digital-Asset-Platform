@@ -19,24 +19,52 @@ Existing features have also seen substantial enhancements and refinements. The T
 
 ## Features
 
-**Token Management:** Governed by `TokenDashboard.js`, using `AssetsContext` for state and `TokenHistoryContext` for logging.
-    * Dashboard overview of *managed* token assets (wizard-issued or specific predefined types like ACP, MMFUSD, XAGC, WTOIL, VCC). Includes `TokenMetricsDashboard` showing aggregate metrics, reserve ratios, and a monthly circulation/reserve chart.
-    * Detailed view (`AssetDetailView.js`) for individual assets, adapting content for wizard-issued vs. predefined types.
-    * Workflow for issuing new token types via a multi-step wizard (`TokenIssuanceWizard.js`):
-        * Define Token Details (Name, Symbol, Blockchain, Type: RWA, Capital Asset, Currency + Subtypes).
-        * Configure Supply (Initial, Finite/Infinite, Decimals), Metadata, and Market Value.
-        * Configure Reserves (if asset-backed): Select backing method (Bank, Smart Contract, Custodian, On-Chain Wallet) and connect/verify details.
-        * Configure Permissions & Features: KYC requirements (Levels), Fee Schedules (Percentage/Flat, Recipient Allocation), Pausable status, Fungibility, Expiration Date, Role Assignments (Minter, Burner, Pauser, etc.).
-        * Specify Regulatory Information (Jurisdiction, Regulator).
-        * Define Token Custody Arrangement (Self vs. Third-Party).
-        * Includes simulated multi-step approval workflow (Compliance, Management).
-    * Workflow for minting additional units of existing finite tokens (`MintExistingToken.js`): Increases `totalSupplyIssued` and updates reserve data (simulated check); *does not* directly increase circulating supply (`balance`). Includes simulated Treasury approval.
-    * Workflow for burning (destroying) existing finite tokens (`BurnTokenScreen.js`): Decreases `totalSupplyIssued` and updates reserve data; *does not* directly decrease circulating supply (`balance`). Includes simulated Compliance & Treasury approval.
-    * Workflow for redeeming tokens (`RedeemTokenScreen.js`): *Decreases both* circulating supply (`balance`) and `totalSupplyIssued`. Allows specifying payout currency (for eligible types) or redeeming for underlying value. Includes simulated multi-step approval and optional smart contract execution simulation.
-    * Workflow for swapping tokens (`SwapTokenScreen.js`): Allows swapping between Treasury assets and platform-issued tokens (affects circulating `balance`). Includes simulated multi-step approval and optional smart contract execution simulation.
-    * Reserve Management view (`ReserveManagementScreen.js`): Displays *dynamic* reserve data from `AssetsContext` (Total Issued, Circulation, Ratio, Composition, Accounts) and allows configuration of reserve ratio alert thresholds.
-    * Simulated pause/unpause functionality for wizard-issued tokens (`AssetDetailView.js` workflow) with simulated Pauser Role approval.
-    * Token action history log managed via `TokenHistoryContext`, with details viewable in a modal (`HistoryDetailModal.js`).
+### Token Management
+
+Governed by `TokenDashboard.js`, using `AssetsContext` for state and `TokenHistoryContext` for logging.
+
+* **Dashboard Overview:**
+    * Provides an overview of managed token assets (wizard-issued or specific predefined types like `ACP`, `MMFUSD`, `XAGC`, `WTOIL`, `VCC`).
+    * Includes `TokenMetricsDashboard` showing aggregate metrics, reserve ratios, and a monthly circulation/reserve chart.
+* **Detailed Asset View (`AssetDetailView.js`):**
+    * Displays details for individual assets.
+    * Adapts content presentation based on whether the token is wizard-issued or a predefined type.
+* **Workflow: New Token Issuance (`TokenIssuanceWizard.js`):**
+    * A multi-step wizard for creating new token types:
+        * **Define Token Details:** Name, Symbol, Blockchain, Type (RWA, Capital Asset, Currency + Subtypes).
+        * **Configure Supply:** Initial supply, Finite/Infinite, Decimals, Metadata, Market Value.
+        * **Configure Reserves (if asset-backed):** Select backing method (Bank, Smart Contract, Custodian, On-Chain Wallet) and connect/verify details.
+        * **Configure Permissions & Features:** KYC requirements (Levels), Fee Schedules (Percentage/Flat, Recipient Allocation), Pausable status, Fungibility, Expiration Date, Role Assignments (Minter, Burner, Pauser, etc.).
+        * **Specify Regulatory Information:** Jurisdiction, Regulator.
+        * **Define Token Custody:** Arrangement (Self vs. Third-Party).
+    * Includes a simulated multi-step approval workflow (Compliance, Management).
+* **Workflow: Mint Existing Tokens (`MintExistingToken.js`):**
+    * Increases `totalSupplyIssued` for existing finite tokens.
+    * Updates reserve data (simulated check).
+    * *Does not* directly increase circulating supply (`balance`).
+    * Includes simulated Treasury approval.
+* **Workflow: Burn Tokens (`BurnTokenScreen.js`):**
+    * Decreases `totalSupplyIssued` for existing finite tokens.
+    * Updates reserve data.
+    * *Does not* directly decrease circulating supply (`balance`).
+    * Includes simulated Compliance & Treasury approval.
+* **Workflow: Redeem Tokens (`RedeemTokenScreen.js`):**
+    * Decreases *both* circulating supply (`balance`) and `totalSupplyIssued`.
+    * Allows specifying payout currency (for eligible types) or redeeming for underlying value.
+    * Includes simulated multi-step approval and optional smart contract execution simulation.
+* **Workflow: Swap Tokens (`SwapTokenScreen.js`):**
+    * Allows swapping between Treasury assets and platform-issued tokens.
+    * Affects circulating `balance`.
+    * Includes simulated multi-step approval and optional smart contract execution simulation.
+* **Reserve Management (`ReserveManagementScreen.js`):**
+    * Displays dynamic reserve data from `AssetsContext` (Total Issued, Circulation, Ratio, Composition, Accounts).
+    * Allows configuration of reserve ratio alert thresholds.
+* **Pause/Unpause Functionality:**
+    * Simulated functionality for wizard-issued tokens via `AssetDetailView.js` workflow.
+    * Includes simulated Pauser Role approval.
+* **Token History Log:**
+    * Managed via `TokenHistoryContext`.
+    * Detailed view available in a modal (`HistoryDetailModal.js`).
 
 * **Payments:** Orchestrated by `PaymentsDashboard.js`, utilizing contexts (`PaymentHistoryContext`, `TemplatesContext`, `RecurringPaymentsContext`, `ActiveBulkContext`) for state.
     * Central dashboard with tab navigation for Cross-Border, High-Value, and Bulk payments.
