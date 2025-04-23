@@ -23,6 +23,15 @@ const roundToTwoDecimals = (num) => {
     return Math.round((num + Number.EPSILON) * 100) / 100;
 };
 
+// List of account labels to exclude for institutional payments (case-insensitive check will be applied)
+// Updated 'Bitcoin Cold Storage' to 'Bitcoin Cold Storage 1' based on screenshot
+const institutionalExcludedLabels = [
+    'Bitcoin Cold Storage 1', // <-- Updated this line
+    'Aave Cold Storage',
+    'Physical Gold Zurich',
+    'Aged Whiskey Cask #42'
+];
+
 // Updated component signature: removed assets prop
 const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) => {
 
@@ -67,20 +76,44 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
     });
 
     // --- Derived Data ---
-    // Updated: Use assets from context
+    // Updated: Use assets from context and filter based on origin and excluded labels (case-insensitive and trimmed)
     const availableSenderAccounts = useMemo(() => {
         if (!Array.isArray(assets)) return []; // Handle loading/null state
+
         if (paymentOrigin === 'client') {
+            // For client payments, show non-institutional accounts
             return assets.filter(a => !a.isInstitutional);
         } else {
-            return assets.filter(a => a.isInstitutional || a.isWizardIssued);
+            // For institutional payments, show institutional or wizard-issued accounts,
+            // EXCLUDING specific labels defined in institutionalExcludedLabels (case-insensitive and trimmed)
+            const lowerCaseTrimmedExcludedLabels = institutionalExcludedLabels.map(label => label.toLowerCase().trim()); // Convert excluded labels to lowercase and trim whitespace
+            return assets.filter(a => {
+                // Ensure label exists, convert to lowercase and trim before comparison
+                const accountLabelLowerTrimmed = a.label?.toLowerCase().trim() || '';
+                return (
+                    (a.isInstitutional || a.isWizardIssued) && // Check if institutional or wizard-issued
+                    !lowerCaseTrimmedExcludedLabels.includes(accountLabelLowerTrimmed) // Check if the label is NOT in the excluded list
+                );
+            });
         }
-    }, [paymentOrigin, assets]); // Dependency is now context assets
+    }, [paymentOrigin, assets]); // Dependency is now context assets and paymentOrigin
 
     // Depends on availableSenderAccounts (derived from context assets)
     const selectedSenderAsset = useMemo(() => {
+        // Find the account in the *filtered* list
         return availableSenderAccounts.find(a => a.id === senderAccountId);
     }, [availableSenderAccounts, senderAccountId]);
+
+    // If the currently selected account ID is no longer in the available list (due to origin change), reset it
+    useEffect(() => {
+        if (senderAccountId && !availableSenderAccounts.some(acc => acc.id === senderAccountId)) {
+            setSenderAccountId('');
+            setCurrency('');
+            // Optionally clear related errors if needed
+            setErrors(prev => ({ ...prev, senderAccountId: null, amount: null }));
+        }
+    }, [availableSenderAccounts, senderAccountId]);
+
 
     // Other memos remain the same, but depend on selectedSenderAsset (now derived from context)
     const amountNumber = useMemo(() => parseFloat(amount) || 0, [amount]);
@@ -122,7 +155,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
         if (paymentOrigin === 'client' && paymentType !== 'internal') {
             if (!recipientJurisdiction) {
                 newErrors.recipientJurisdiction = 'Please select recipient jurisdiction.';
-            } else if (exchangeRate === null) {
+            } else if (exchangeRate === null && selectedSenderAsset && targetCurrency && selectedSenderAsset.symbol !== targetCurrency) { // Only show FX error if currencies differ
                  newErrors.recipientJurisdiction = 'FX rate unavailable or cannot be calculated for this pair.';
             }
         }
@@ -134,7 +167,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
     // --- Effects (Original logic preserved, dependencies updated if needed) ---
     const resetFieldsOnOriginOrTypeChange = useCallback(() => {
         if (initialData) return;
-        setSenderAccountId('');
+        // Don't reset senderAccountId here, let the useEffect handle it based on availability
         setOnBehalfOfName('');
         setRecipientJurisdiction('');
         setTraditionalRail('');
@@ -145,7 +178,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
         setIsManualRecipientEntry(false);
         setSelectedRecipientPresetId('');
         setAmount('');
-        setCurrency('');
+        // Don't reset currency here, let the useEffect handle it based on selected account
         setDescription('');
         setPurpose('');
         setSenderEntity(sampleEntities[0] || '');
@@ -188,33 +221,69 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
         setErrors(prev => ({ ...prev, recipientAccount: null }));
     }, [isManualRecipientEntry, paymentOrigin, selectedRecipientPresetId]);
 
+    // Effect to reset fields when origin changes, but keep senderAccountId if still valid
     useEffect(() => {
         resetFieldsOnOriginOrTypeChange();
         setIsManualRecipientEntry(paymentOrigin === 'client');
         setSelectedRecipientPresetId('');
-    }, [paymentOrigin, resetFieldsOnOriginOrTypeChange]);
+        // Check if the current senderAccountId is still valid for the new origin
+        const currentAccountStillValid = availableSenderAccounts.some(acc => acc.id === senderAccountId);
+        if (!currentAccountStillValid) {
+            setSenderAccountId(''); // Reset if no longer valid
+            setCurrency('');
+        }
+        // No need to reset fields again if initialData is present (handled later)
+    }, [paymentOrigin, resetFieldsOnOriginOrTypeChange, availableSenderAccounts, senderAccountId, initialData]); // Added availableSenderAccounts, senderAccountId
 
-    useEffect(() => {
+    // Effect to reset fields when payment type changes
+     useEffect(() => {
         if (!initialData) {
-           resetFieldsOnOriginOrTypeChange();
-            if (paymentOrigin === 'institutional') {
-               setIsManualRecipientEntry(false);
-               setSelectedRecipientPresetId('');
+            // Only reset fields relevant to payment type change
+            setTraditionalRail('');
+            setOnChainNetwork('');
+            setSettlementSpeed('standard');
+            setErrors(prev => ({ ...prev, traditionalRail: null, onChainNetwork: null }));
+
+            // Reset recipient details if switching away from internal
+            if (paymentType !== 'internal') {
+                 // Keep recipient details if switching between traditional/on-chain? Maybe not.
+                 // setRecipientName('');
+                 // setRecipientAccount('');
+                 // setRecipientInstitution('');
+            } else {
+                 // Clear jurisdiction if switching TO internal
+                 setRecipientJurisdiction('');
+                 setErrors(prev => ({ ...prev, recipientJurisdiction: null }));
             }
-       }
-    }, [paymentType, paymentOrigin, initialData, resetFieldsOnOriginOrTypeChange]);
+        }
+     }, [paymentType, initialData]); // Removed paymentOrigin, resetFieldsOnOriginOrTypeChange
 
     // Updated: Depends on selectedSenderAsset (derived from context)
      useEffect(() => {
          const symbol = selectedSenderAsset?.symbol || '';
-         setCurrency(symbol);
-         if (errors.amount?.includes('exceeds available balance') && selectedSenderAsset && amountNumber <= selectedSenderAsset.balance) { setErrors(prev => ({ ...prev, amount: null })); }
-         if (!selectedSenderAsset) setAmount('');
-         if (paymentOrigin === 'client' && paymentType !== 'internal' && selectedSenderAsset && !ratesToUSD[symbol]) {
-              setRecipientJurisdiction('');
-              setErrors(prev => ({ ...prev, recipientJurisdiction: 'Source currency cannot be used for FX.' }));
-         } else if (errors.recipientJurisdiction === 'Source currency cannot be used for FX.') {
-              setErrors(prev => ({ ...prev, recipientJurisdiction: null }));
+         setCurrency(symbol); // Update currency based on the selected asset
+         // Clear amount error if balance is now sufficient or no asset selected
+         if (errors.amount?.includes('exceeds available balance') && (!selectedSenderAsset || (selectedSenderAsset && amountNumber <= selectedSenderAsset.balance))) {
+             setErrors(prev => ({ ...prev, amount: null }));
+         }
+         // Clear amount if no asset is selected anymore
+         if (!selectedSenderAsset) {
+            setAmount('');
+         }
+         // Handle FX availability check
+         if (paymentOrigin === 'client' && paymentType !== 'internal') {
+            if (selectedSenderAsset && !ratesToUSD[symbol]) {
+                 setRecipientJurisdiction(''); // Reset jurisdiction if source currency cannot be used for FX
+                 setErrors(prev => ({ ...prev, recipientJurisdiction: 'Source currency cannot be used for FX.' }));
+            } else if (errors.recipientJurisdiction === 'Source currency cannot be used for FX.') {
+                 // Clear the error if the source currency is now valid or no asset selected
+                 setErrors(prev => ({ ...prev, recipientJurisdiction: null }));
+            }
+         } else {
+             // Clear FX-related jurisdiction error if not a client FX payment
+            if (errors.recipientJurisdiction === 'Source currency cannot be used for FX.' || errors.recipientJurisdiction === 'FX rate unavailable or cannot be calculated for this pair.') {
+                 setErrors(prev => ({ ...prev, recipientJurisdiction: null }));
+            }
          }
      }, [selectedSenderAsset, paymentOrigin, paymentType, errors.amount, errors.recipientJurisdiction, amountNumber]); // selectedSenderAsset dependency is key
 
@@ -245,47 +314,66 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
 
                 if (paymentType === 'on-chain') {
                     const network = effectiveOnChainNetwork;
-                    const baseFeeUSD = baseGasFeeUSD[network] || baseGasFeeUSD.default;
-                    const variability = 1 + (Math.random() * 0.1 - 0.05);
-                    const totalNetworkInteractionFeeUSD = (baseFeeUSD * PRIORITY_MULTIPLIER) + CONTRACT_INTERACTION_FEE_USD;
-                    networkFeeSourceCurrency = (totalNetworkInteractionFeeUSD / sourceToUSDRate) * variability;
-                    tempNetworkFee = networkFeeSourceCurrency;
-                    tempContractInteractionFee = (CONTRACT_INTERACTION_FEE_USD / sourceToUSDRate) * variability;
-                    tempSlippageFee = tempPaymentAmount * SLIPPAGE_FEE_PERCENT;
-                    const nativeSymbol = onChainNetworksList.find(n => n.code === network)?.nativeSymbol;
-                    const nativePriceUSD = nativeTokenPricesUSD[nativeSymbol];
-                    if (nativeSymbol && nativePriceUSD > 0) {
-                        const nativeAmount = (totalNetworkInteractionFeeUSD / nativePriceUSD) * variability;
-                        tempNetworkFeeDisplay = `${nativeAmount.toFixed(6)} ${nativeSymbol} (Est. Gas + Interaction)`;
-                    } else {
-                        tempNetworkFeeDisplay = `${roundToTwoDecimals(tempNetworkFee).toFixed(4)} ${sourceCurrencySymbol} (Est. Network Fees)`;
+                    if (network) { // Ensure network is selected/derived
+                        const baseFeeUSD = baseGasFeeUSD[network] || baseGasFeeUSD.default;
+                        const variability = 1 + (Math.random() * 0.1 - 0.05); // Simulate variability
+                        const totalNetworkInteractionFeeUSD = (baseFeeUSD * PRIORITY_MULTIPLIER) + CONTRACT_INTERACTION_FEE_USD;
+                        networkFeeSourceCurrency = (totalNetworkInteractionFeeUSD / sourceToUSDRate) * variability;
+                        tempNetworkFee = networkFeeSourceCurrency;
+                        tempContractInteractionFee = (CONTRACT_INTERACTION_FEE_USD / sourceToUSDRate) * variability; // Part of network fee
+                        tempSlippageFee = tempPaymentAmount * SLIPPAGE_FEE_PERCENT;
+
+                        const nativeSymbol = onChainNetworksList.find(n => n.code === network)?.nativeSymbol;
+                        const nativePriceUSD = nativeTokenPricesUSD[nativeSymbol];
+                        if (nativeSymbol && nativePriceUSD > 0) {
+                            const nativeAmount = (totalNetworkInteractionFeeUSD / nativePriceUSD) * variability;
+                            tempNetworkFeeDisplay = `${nativeAmount.toFixed(6)} ${nativeSymbol} (Est. Gas + Interaction)`;
+                        } else {
+                            // Fallback if native token info isn't available
+                            tempNetworkFeeDisplay = `${roundToTwoDecimals(tempNetworkFee).toFixed(4)} ${sourceCurrencySymbol} (Est. Network Fees)`;
+                        }
                     }
                 } else if (paymentType === 'traditional') {
-                    const speedData = settlementSpeeds[settlementSpeed];
-                    tempSettlementFee = speedData ? tempPaymentAmount * speedData.feePercent : 0;
-                    const railInfo = traditionalRailsList.find(r => r.code === traditionalRail);
-                    if (railInfo?.feeType === 'flat') { networkFeeSourceCurrency = railInfo.fee || 0; }
-                    else if (railInfo?.feeType === 'percent') { networkFeeSourceCurrency = tempPaymentAmount * (railInfo.fee || 0); }
-                    else { networkFeeSourceCurrency = 0; }
-                    tempNetworkFee = networkFeeSourceCurrency;
-                    tempNetworkFeeDisplay = `${roundToTwoDecimals(tempNetworkFee).toFixed(2)} ${sourceCurrencySymbol} (${railInfo?.name || 'Rail Fee'})`;
-                    tempGenericBankFee = tempPaymentAmount * GENERIC_BANK_FEE_PERCENT;
+                    if (traditionalRail) { // Ensure rail is selected
+                        const speedData = settlementSpeeds[settlementSpeed];
+                        tempSettlementFee = speedData ? tempPaymentAmount * speedData.feePercent : 0;
+                        const railInfo = traditionalRailsList.find(r => r.code === traditionalRail);
+                        if (railInfo?.feeType === 'flat') { networkFeeSourceCurrency = railInfo.fee || 0; }
+                        else if (railInfo?.feeType === 'percent') { networkFeeSourceCurrency = tempPaymentAmount * (railInfo.fee || 0); }
+                        else { networkFeeSourceCurrency = 0; }
+                        tempNetworkFee = networkFeeSourceCurrency;
+                        tempNetworkFeeDisplay = `${roundToTwoDecimals(tempNetworkFee).toFixed(2)} ${sourceCurrencySymbol} (${railInfo?.name || 'Rail Fee'})`;
+                        tempGenericBankFee = tempPaymentAmount * GENERIC_BANK_FEE_PERCENT;
+                    }
+                } else if (paymentType === 'internal') {
+                    // Internal transfers might have minimal fees, adjust as needed
+                    tempPlatformFee = tempPaymentAmount * (PLATFORM_FEE_PERCENT / 2); // Example: lower platform fee
+                    tempSettlementFee = 0;
+                    tempNetworkFee = 0;
+                    tempSlippageFee = 0;
+                    tempContractInteractionFee = 0;
+                    tempFxSpreadFee = 0;
+                    tempGenericBankFee = 0;
+                    tempNetworkFeeDisplay = 'N/A';
                 }
 
+                // Calculate FX only for client payments that are not internal and have a valid rate
                 if (isClientPayment && paymentType !== 'internal' && exchangeRate !== null && exchangeRate > 0 && targetCurrency) {
                     tempReceivedAmount = tempPaymentAmount * exchangeRate;
                     tempFxSpreadFee = tempPaymentAmount * FX_SPREAD_PERCENT;
                 }
 
+                // Sum up all calculated fees
                 let tempTotal = tempPaymentAmount + tempPlatformFee + tempSettlementFee + tempNetworkFee +
-                                tempSlippageFee + tempFxSpreadFee + tempGenericBankFee; // Contract fee included in network
+                                tempSlippageFee + tempFxSpreadFee + tempGenericBankFee; // Contract fee is part of network fee
 
                 calculatedPreview.paymentAmount = roundToTwoDecimals(tempPaymentAmount);
                 calculatedPreview.platformFee = roundToTwoDecimals(tempPlatformFee);
                 calculatedPreview.settlementFee = roundToTwoDecimals(tempSettlementFee);
                 calculatedPreview.networkFee = roundToTwoDecimals(tempNetworkFee);
                 calculatedPreview.slippageFee = roundToTwoDecimals(tempSlippageFee);
-                calculatedPreview.contractInteractionFee = roundToTwoDecimals(tempContractInteractionFee);
+                // Contract interaction fee is bundled into network fee display for on-chain
+                calculatedPreview.contractInteractionFee = paymentType === 'on-chain' ? roundToTwoDecimals(tempContractInteractionFee) : 0;
                 calculatedPreview.fxSpreadFee = roundToTwoDecimals(tempFxSpreadFee);
                 calculatedPreview.genericBankFee = roundToTwoDecimals(tempGenericBankFee);
                 calculatedPreview.total = roundToTwoDecimals(tempTotal);
@@ -298,8 +386,10 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
         setPreviewData(calculatedPreview);
     }, [
         amountNumber, selectedSenderAsset, settlementSpeed, paymentType, paymentOrigin,
-        exchangeRate, targetCurrency, traditionalRail, effectiveOnChainNetwork
+        exchangeRate, targetCurrency, traditionalRail, effectiveOnChainNetwork,
+        ratesToUSD // Added ratesToUSD as it's used directly
     ]); // Dependencies updated
+
 
     // Workflow effect remains the same
      useEffect(() => {
@@ -313,6 +403,26 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
     // Updated: Populate form from initialData - depends on context assets loading
     useEffect(() => {
         if (initialData && Array.isArray(assets) && assets.length > 0) { // Ensure assets are loaded
+            console.log("Populating form from initialData:", initialData);
+            // Determine origin based on the account label FIRST if possible
+            const labelToFind = initialData.fromAccountLabel;
+            const senderAccount = assets.find(acc => acc.label === labelToFind); // Use context assets
+            let determinedOrigin = initialData.paymentOrigin || 'institutional'; // Default if account not found
+
+            if (senderAccount) {
+                determinedOrigin = senderAccount.isInstitutional ? 'institutional' : 'client';
+                setPaymentOrigin(determinedOrigin); // Set origin based on found account
+                setSenderAccountId(senderAccount.id);
+                setCurrency(senderAccount.symbol || '');
+                console.log(`Found account ${senderAccount.id} for label ${labelToFind}, origin set to ${determinedOrigin}`);
+            } else {
+                console.warn("CreatePaymentScreen: Could not find sender account from template label:", labelToFind);
+                setPaymentOrigin(determinedOrigin); // Use origin from initialData or default
+                setSenderAccountId(''); // No account found
+                setCurrency('');
+            }
+
+            // Set remaining fields AFTER origin is determined
             setPaymentType(initialData.paymentType || 'on-chain');
             setRecipientName(initialData.recipientName || '');
             setRecipientAccount(initialData.recipientAccount || '');
@@ -322,30 +432,18 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
             setDescription(initialData.description || '');
             setOnBehalfOfName(initialData.onBehalfOfName || '');
 
-            const labelToFind = initialData.fromAccountLabel;
-            const senderAccount = assets.find(acc => acc.label === labelToFind); // Use context assets
-            let determinedOrigin = 'institutional';
-
-            if (senderAccount) {
-                setSenderAccountId(senderAccount.id);
-                determinedOrigin = senderAccount.isInstitutional ? 'institutional' : 'client';
-                setPaymentOrigin(determinedOrigin);
-                setCurrency(senderAccount.symbol || '');
-            } else {
-                console.warn("CreatePaymentScreen: Could not find sender account from template label:", labelToFind);
-                setSenderAccountId('');
-                determinedOrigin = initialData.paymentOrigin || 'institutional';
-                setPaymentOrigin(determinedOrigin);
-                setCurrency('');
-            }
-
              if (initialData.paymentType === 'traditional') { setTraditionalRail(initialData.traditionalRail || ''); setSettlementSpeed(initialData.settlementSpeed || 'standard'); setOnChainNetwork(''); }
              else if (initialData.paymentType === 'on-chain') { setOnChainNetwork(initialData.onChainNetwork || ''); setTraditionalRail(''); setSettlementSpeed('standard'); }
-             else { setTraditionalRail(''); setOnChainNetwork(''); setSettlementSpeed('standard'); }
-             setIsManualRecipientEntry(true); setSelectedRecipientPresetId(''); setDateType('immediate'); setScheduledDate(''); setDebitReference('');
+             else { setTraditionalRail(''); setOnChainNetwork(''); setSettlementSpeed('standard'); } // Handle 'internal' or others
+
+             // Set recipient entry mode based on determined origin
+             setIsManualRecipientEntry(determinedOrigin === 'client');
+             setSelectedRecipientPresetId(''); // Always reset preset ID when loading from template
+
+             setDateType('immediate'); setScheduledDate(''); setDebitReference('');
              if (determinedOrigin === 'institutional') { setSenderEntity(initialData.sendingEntity || sampleEntities[0] || ''); }
              else { setSenderEntity(''); }
-             setErrors({});
+             setErrors({}); // Clear errors after populating
         }
      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialData, assets]); // Depend on context assets
@@ -384,6 +482,8 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
         const isClientPayment = paymentOrigin === 'client';
         const isTraditional = paymentType === 'traditional';
         const isOnChain = paymentType === 'on-chain';
+        const isInternal = paymentType === 'internal'; // Added check for internal
+
         const simulatedFees = {
             platform: previewData.platformFee, settlement: previewData.settlementFee,
             networkOrRail: previewData.networkFee, slippage: previewData.slippageFee,
@@ -392,36 +492,75 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
         };
         // Uses selectedSenderAsset derived from context
         const paymentAPIData = {
-             destination_counterparty_info: { name: recipientName.trim() || undefined, accountIdentifier: recipientAccount.trim(), institution: recipientInstitution.trim() || undefined, ...(isClientPayment && paymentType !== 'internal' && { jurisdiction: recipientJurisdiction }) },
-             payment_source: { account_id: senderAccountId, account_label: selectedSenderAsset?.label || 'Unknown', ...(paymentOrigin === 'institutional' && { entity: senderEntity }), ...(paymentOrigin === 'institutional' && onBehalfOfName.trim() && { onBehalfOf: onBehalfOfName.trim() }) },
-             payment_info: { amount: amountNumber, currency: currency, purpose: purpose, description: description.trim() || debitReference.trim() || undefined },
-             _ui_payment_type: paymentType, _ui_payment_origin: paymentOrigin,
+             destination_counterparty_info: {
+                 name: recipientName.trim() || undefined,
+                 accountIdentifier: recipientAccount.trim(),
+                 institution: recipientInstitution.trim() || undefined,
+                 // Only include jurisdiction for non-internal client payments
+                 ...(isClientPayment && !isInternal && { jurisdiction: recipientJurisdiction })
+             },
+             payment_source: {
+                 account_id: senderAccountId,
+                 account_label: selectedSenderAsset?.label || 'Unknown',
+                 ...(paymentOrigin === 'institutional' && { entity: senderEntity }),
+                 ...(paymentOrigin === 'institutional' && onBehalfOfName.trim() && { onBehalfOf: onBehalfOfName.trim() })
+             },
+             payment_info: {
+                 amount: amountNumber,
+                 currency: currency,
+                 purpose: purpose,
+                 description: description.trim() || debitReference.trim() || undefined
+             },
+             _ui_payment_type: paymentType,
+             _ui_payment_origin: paymentOrigin,
              ...(isTraditional && { _ui_settlement_speed: settlementSpeed, _ui_traditional_rail: traditionalRail }),
              ...(isOnChain && { _ui_onchain_network: effectiveOnChainNetwork }),
-             _ui_date_type: dateType, _ui_scheduled_date: dateType === 'scheduled' ? scheduledDate : null,
-             _simulated_fees: simulatedFees, _ui_network_fee_display: previewData.networkFeeDisplay,
+             _ui_date_type: dateType,
+             _ui_scheduled_date: dateType === 'scheduled' ? scheduledDate : null,
+             _simulated_fees: simulatedFees,
+             _ui_network_fee_display: previewData.networkFeeDisplay,
              _simulated_total_debit: previewData.total,
-             ...(isClientPayment && paymentType !== 'internal' && { _simulated_exchange_rate: previewData.exchangeRate, _simulated_recipient_amount: previewData.receivedAmount, _simulated_recipient_currency: previewData.receivedCurrencySymbol, })
+             // Only include FX/recipient amount details for non-internal client payments
+             ...(isClientPayment && !isInternal && {
+                 _simulated_exchange_rate: previewData.exchangeRate,
+                 _simulated_recipient_amount: previewData.receivedAmount,
+                 _simulated_recipient_currency: previewData.receivedCurrencySymbol,
+             })
          };
         if (typeof onPaymentSubmit === 'function') { onPaymentSubmit(paymentAPIData); }
         else { console.error("onPaymentSubmit prop is not a function!"); alert("Error submitting payment."); }
     };
 
     // Render review data function (uses derived state)
-    const renderReviewData = () => {
+    // Refactored to return an object with JSX and helper functions
+    const renderReviewData = useCallback(() => {
         const isTraditional = paymentType === 'traditional';
         const isOnChain = paymentType === 'on-chain';
         const isInternal = paymentType === 'internal';
         const effectiveSettlement = isTraditional ? (settlementSpeeds[settlementSpeed]?.label || settlementSpeed) : 'Instant';
         const senderLabel = selectedSenderAsset?.label ?? 'N/A'; // Uses derived state
         const senderSymbol = selectedSenderAsset?.symbol ?? ''; // Uses derived state
-        const allFees = [
-             { label: 'Platform Fee', value: previewData.platformFee }, { label: 'Settlement Fee', value: previewData.settlementFee }, { label: isOnChain ? 'Network Fee (Est.)' : 'Rail Fee', value: previewData.networkFee, display: previewData.networkFeeDisplay }, { label: 'Slippage (Est.)', value: previewData.slippageFee }, { label: 'Contract Fee (Est.)', value: previewData.contractInteractionFee, hide: previewData.networkFeeDisplay?.includes('Interaction') }, { label: 'FX Spread (Est.)', value: previewData.fxSpreadFee }, { label: 'Banking Fee (Est.)', value: previewData.genericBankFee },
-        ].filter(fee => typeof fee.value === 'number' && fee.value > 0 && !fee.hide);
-        const formatCurrency = (value, currency) => {
-             if (typeof value !== 'number') return 'N/A'; return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: currency === 'BTC' || currency === 'ETH' ? 6 : 2 }) + (currency ? ` ${currency}` : '');
+
+        const formatCurrency = (value, currencySymbol) => {
+             if (typeof value !== 'number' || isNaN(value)) return 'N/A';
+             const minDigits = 2;
+             const maxDigits = (currencySymbol === 'BTC' || currencySymbol === 'ETH' || currencySymbol === 'SOL') ? 6 : 2;
+             return value.toLocaleString(undefined, {
+                 minimumFractionDigits: Math.min(minDigits, maxDigits),
+                 maximumFractionDigits: maxDigits
+                }) + (currencySymbol ? ` ${currencySymbol}` : '');
         };
-        return (
+
+        const allFees = [
+             { label: 'Platform Fee', value: previewData.platformFee },
+             { label: 'Settlement Fee', value: previewData.settlementFee, hide: !isTraditional },
+             { label: isOnChain ? 'Network Fee (Est.)' : 'Rail Fee', value: previewData.networkFee, display: previewData.networkFeeDisplay, hide: isInternal },
+             { label: 'Slippage (Est.)', value: previewData.slippageFee, hide: !isOnChain },
+             { label: 'FX Spread (Est.)', value: previewData.fxSpreadFee, hide: !(paymentOrigin === 'client' && !isInternal) },
+             { label: 'Banking Fee (Est.)', value: previewData.genericBankFee, hide: !isTraditional },
+        ].filter(fee => !fee.hide && typeof fee.value === 'number' && fee.value > 0);
+
+        const jsx = (
          <div className='p-4 border rounded bg-gray-50 mb-6 space-y-3 text-sm'>
             <h3 className="font-semibold text-base mb-3 border-b pb-2 text-gray-800">Payment Review Summary</h3>
             <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
@@ -445,19 +584,45 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                  {/* Transfer */}
                  <div className="md:col-span-2 font-medium text-gray-700 border-b pb-1 mb-1 mt-2">Transfer Details</div>
                   <dt className="text-gray-500">Amount to Send:</dt><dd className="font-semibold">{formatCurrency(previewData.paymentAmount, previewData.currencySymbol)}</dd>
-                  {paymentOrigin === 'client' && !isInternal && previewData.exchangeRate && previewData.receivedAmount !== null && ( <> <dt className="text-gray-500">Exchange Rate (Est.):</dt> <dd>1 {previewData.currencySymbol || ''} ≈ {(previewData.exchangeRate ?? 0).toFixed(4)} {previewData.receivedCurrencySymbol || ''}</dd> <dt className="text-gray-500 font-semibold">Recipient Receives (Est.):</dt> <dd className="font-semibold">{formatCurrency(previewData.receivedAmount, previewData.receivedCurrencySymbol)}</dd> </> )}
+                  {paymentOrigin === 'client' && !isInternal && previewData.exchangeRate && previewData.receivedAmount !== null && (
+                    <>
+                        <dt className="text-gray-500">Exchange Rate (Est.):</dt>
+                        <dd>1 {previewData.currencySymbol || ''} ≈ {(previewData.exchangeRate ?? 0).toFixed(4)} {previewData.receivedCurrencySymbol || ''}</dd>
+                        <dt className="text-gray-500 font-semibold">Recipient Receives (Est.):</dt>
+                        <dd className="font-semibold">{formatCurrency(previewData.receivedAmount, previewData.receivedCurrencySymbol)}</dd>
+                    </>
+                  )}
                   <dt className="text-gray-500">Settlement Speed:</dt><dd>{effectiveSettlement}</dd>
                   <dt className="text-gray-500">Payment Date:</dt><dd>{dateType === 'scheduled' ? scheduledDate : 'Immediate'}</dd>
                   <dt className="text-gray-500">Purpose:</dt><dd>{purpose || 'N/A'}</dd>
                   <dt className="text-gray-500">Description:</dt><dd>{description || <span className="italic text-gray-500">None</span>}</dd>
                  {/* Fees */}
                   <dt className="text-gray-500 pt-2 border-t md:col-span-2 font-semibold">Fees (Estimated):</dt>
-                  {allFees.length > 0 ? ( allFees.map((fee, index) => ( <React.Fragment key={index}> <dt className="text-gray-500 pl-4">{fee.label}:</dt> <dd className="font-medium"> {fee.display || formatCurrency(fee.value, previewData.currencySymbol)} </dd> </React.Fragment> )) ) : ( <> <dt className="text-gray-500 pl-4">Fees:</dt> <dd className="italic text-gray-500">None Estimated</dd> </> )}
+                  {allFees.length > 0 ? (
+                     allFees.map((fee, index) => (
+                        <React.Fragment key={index}>
+                            <dt className="text-gray-500 pl-4">{fee.label}:</dt>
+                            <dd className="font-medium"> {fee.display || formatCurrency(fee.value, previewData.currencySymbol)} </dd>
+                        </React.Fragment>
+                     ))
+                   ) : (
+                     <> <dt className="text-gray-500 pl-4">Fees:</dt> <dd className="italic text-gray-500">None Estimated</dd> </>
+                   )}
                  {/* Total */}
-                  <div className="md:col-span-2 flex justify-between items-start pt-2 border-t mt-2"> <dt className="font-semibold text-gray-800">Total Estimated Debit:</dt> <dd className="font-semibold text-gray-800 text-base">{formatCurrency(previewData.total, previewData.currencySymbol)}</dd> </div>
+                  <div className="md:col-span-2 flex justify-between items-start pt-2 border-t mt-2">
+                    <dt className="font-semibold text-gray-800">Total Estimated Debit:</dt>
+                    <dd className="font-semibold text-gray-800 text-base">{formatCurrency(previewData.total, previewData.currencySymbol)}</dd>
+                  </div>
             </dl>
-         </div> );
-    };
+         </div>
+        );
+
+        // Return object containing JSX and helper functions/data if needed elsewhere
+        return { jsx, allFees, formatCurrency };
+
+    // Dependencies for the useCallback hook
+    }, [paymentType, settlementSpeed, selectedSenderAsset, paymentOrigin, onBehalfOfName, senderEntity, recipientJurisdiction, targetJurisdictionInfo, recipientName, recipientAccount, recipientInstitution, previewData, dateType, scheduledDate, purpose, description, traditionalRail, effectiveOnChainNetwork]);
+
 
     // --- Main Render (JSX uses context assets via availableSenderAccounts) ---
     return (
@@ -495,6 +660,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
             {/* --- Step 1: Details Form --- */}
             {formStep === 'details' && (
                 <form onSubmit={handleContinueToReview}>
+                    {/* Payment Origin Selection */}
                     <div className="mb-6">
                         <h2 className="font-medium mb-2 text-gray-800">Payment Origin <span className="text-red-600">*</span></h2>
                         <div className="grid grid-cols-2 gap-0 border border-gray-300 rounded-md overflow-hidden">
@@ -519,9 +685,11 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         </div>
                     </div>
 
+                    {/* Payment Type Selection */}
                     <div className="mb-6">
                         <h2 className="font-medium mb-3 text-gray-800">Payment Type <span className="text-red-600">*</span></h2>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {/* On-Chain Option */}
                             <label className={`border rounded p-3 cursor-pointer hover:shadow-md transition-shadow ${paymentType === 'on-chain' ? 'border-emtech-gold bg-yellow-50' : 'border-gray-300'}`}>
                                 <div className="flex items-center">
                                     <input type="radio" name="paymentType" value="on-chain" checked={paymentType === 'on-chain'} onChange={(e) => setPaymentType(e.target.value)} className="mr-2 h-4 w-4 text-emtech-gold focus:ring-emtech-gold"/>
@@ -531,6 +699,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     </div>
                                 </div>
                             </label>
+                             {/* Traditional Option */}
                             <label className={`border rounded p-3 cursor-pointer hover:shadow-md transition-shadow ${paymentType === 'traditional' ? 'border-emtech-gold bg-yellow-50' : 'border-gray-300'}`}>
                                 <div className="flex items-center">
                                     <input type="radio" name="paymentType" value="traditional" checked={paymentType === 'traditional'} onChange={(e) => setPaymentType(e.target.value)} className="mr-2 h-4 w-4 text-emtech-gold focus:ring-emtech-gold"/>
@@ -540,6 +709,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     </div>
                                 </div>
                             </label>
+                             {/* Internal Option */}
                             <label className={`border rounded p-3 cursor-pointer hover:shadow-md transition-shadow ${paymentType === 'internal' ? 'border-emtech-gold bg-yellow-50' : 'border-gray-300'}`}>
                                 <div className="flex items-center">
                                     <input type="radio" name="paymentType" value="internal" checked={paymentType === 'internal'} onChange={(e) => setPaymentType(e.target.value)} className="mr-2 h-4 w-4 text-emtech-gold focus:ring-emtech-gold"/>
@@ -552,6 +722,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         </div>
                     </div>
 
+                    {/* Conditional Fields based on Payment Type */}
                     <TraditionalPaymentFields
                         paymentType={paymentType}
                         traditionalRail={traditionalRail}
@@ -574,11 +745,13 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         clearError={() => setErrors(prev => ({ ...prev, onChainNetwork: null }))}
                     />
 
+                    {/* From / To Sections */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-6">
                         {/* From Section */}
                         <div>
                             <h2 className="font-medium mb-3 text-gray-800">From</h2>
                             <div className="space-y-4">
+                                {/* Sending Entity (Institutional Only) */}
                                 {paymentOrigin === 'institutional' && paymentType !== 'internal' && (
                                     <div>
                                         <label htmlFor="senderEntity" className="block mb-1 text-sm font-medium text-gray-700">Sending Entity <span className="text-red-600">*</span></label>
@@ -587,6 +760,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                         </select>
                                     </div>
                                 )}
+                                {/* Sender Account Dropdown */}
                                 <div>
                                     <label htmlFor="senderAccount" className="block mb-1 text-sm font-medium text-gray-700">
                                         {paymentOrigin === 'client' ? 'Client Account ' : 'Account/Wallet '}
@@ -601,8 +775,9 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                         disabled={availableSenderAccounts.length === 0}
                                     >
                                         <option value="" disabled>
-                                            {availableSenderAccounts.length === 0 ? '-- Loading Accounts --' : '-- Select Source --'}
+                                            {availableSenderAccounts.length === 0 ? (assets === null ? '-- Loading Accounts --' : '-- No Available Accounts --') : '-- Select Source --'}
                                         </option>
+                                        {/* Dropdown options are now filtered based on the updated availableSenderAccounts */}
                                         {availableSenderAccounts.map(account => (
                                             <option key={account.id} value={account.id}>
                                                 {account.label} ({account.balance.toLocaleString()} {account.symbol})
@@ -612,6 +787,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     {renderError(errors.senderAccountId)}
                                     {selectedSenderAsset && <p className="text-xs text-gray-500 mt-1">Selected Balance: {selectedSenderAsset.balance.toLocaleString()} {selectedSenderAsset.symbol}</p>}
                                 </div>
+                                {/* On Behalf Of (Institutional Only) */}
                                 {paymentOrigin === 'institutional' && (
                                     <div>
                                         <label htmlFor="onBehalfOfName" className="block mb-1 text-sm font-medium text-gray-700">On Behalf Of (Optional)</label>
@@ -630,6 +806,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
 
                         {/* To Section */}
                         <div>
+                             {/* Header with Manual Entry Toggle (Institutional Only) */}
                             <div className="flex justify-between items-center mb-3">
                                 <h2 className="font-medium text-gray-800">To</h2>
                                 {paymentOrigin === 'institutional' && (
@@ -651,6 +828,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                             </div>
 
                             <div className="space-y-4">
+                                {/* Recipient Jurisdiction (Client, Non-Internal Only) */}
                                 {paymentOrigin === 'client' && paymentType !== 'internal' && (
                                     <div>
                                         <label htmlFor="recipientJurisdiction" className="block mb-1 text-sm font-medium text-gray-700">Recipient Jurisdiction <span className="text-red-600">*</span></label>
@@ -666,6 +844,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                         {renderError(errors.recipientJurisdiction)}
                                     </div>
                                 )}
+                                {/* Recipient Preset Dropdown (Institutional, Preset Mode Only) */}
                                 {paymentOrigin === 'institutional' && !isManualRecipientEntry && (
                                     <div>
                                         <label htmlFor="recipientPreset" className="block mb-1 text-sm font-medium text-gray-700">Common Institutional Client <span className="text-red-600">*</span></label>
@@ -678,7 +857,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                         >
                                             <option value="" disabled>-- Select Common Inst Client --</option>
                                             {institutionalRecipients
-                                                .filter(p => p.id !== 'inst-rec-0')
+                                                .filter(p => p.id !== 'inst-rec-0') // Exclude placeholder if any
                                                 .map(p => (
                                                     <option key={p.id} value={p.id}>
                                                         {p.name}{p.institution ? ` (${p.institution})` : ''}
@@ -688,6 +867,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                         {renderError(errors.selectedRecipientPresetId)}
                                     </div>
                                 )}
+                                {/* Manual Recipient Fields (Client or Institutional Manual Mode) */}
                                 { (paymentOrigin === 'client' || (paymentOrigin === 'institutional' && isManualRecipientEntry)) && (
                                     <>
                                         <div>
@@ -706,31 +886,31 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                             <input
                                                 id="recipientAccount"
                                                 type="text"
-                                                className={`w-full p-2 border rounded text-sm ${errors.recipientAccount ? 'border-red-500' : 'border-gray-300'} ${paymentOrigin === 'institutional' && !isManualRecipientEntry ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                className={`w-full p-2 border rounded text-sm ${errors.recipientAccount ? 'border-red-500' : 'border-gray-300'}`}
                                                 placeholder={paymentType === 'internal' ? 'Internal Account/Wallet ID' : 'Account #, Wallet Address, etc.'}
                                                 value={recipientAccount}
                                                 onChange={(e) => {setRecipientAccount(e.target.value); setErrors(prev => ({ ...prev, recipientAccount: null }));}}
                                                 required={paymentOrigin === 'client' || isManualRecipientEntry}
-                                                disabled={paymentOrigin === 'institutional' && !isManualRecipientEntry}
                                             />
                                             {renderError(errors.recipientAccount)}
                                         </div>
+                                        {/* Recipient Institution (Not for Internal Transfers) */}
                                         {paymentType !== 'internal' &&
                                             <div>
                                                 <label htmlFor="recipientInst" className="block mb-1 text-sm font-medium text-gray-700">Recipient Institution / Network</label>
                                                 <input
                                                     id="recipientInst"
                                                     type="text"
-                                                    className={`w-full p-2 border rounded text-sm border-gray-300 ${paymentOrigin === 'institutional' && !isManualRecipientEntry ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                                                    className="w-full p-2 border rounded text-sm border-gray-300 bg-white"
                                                     placeholder="e.g., HSBC London, Ethereum Mainnet"
                                                     value={recipientInstitution}
                                                     onChange={(e) => setRecipientInstitution(e.target.value)}
-                                                    disabled={paymentOrigin === 'institutional' && !isManualRecipientEntry}
                                                 />
                                             </div>
                                         }
                                     </>
                                 )}
+                                {/* Display Preset Details (Institutional, Preset Mode Only) */}
                                 {paymentOrigin === 'institutional' && !isManualRecipientEntry && selectedRecipientPresetId && selectedRecipientPresetId !== '' && (
                                     <div className="mt-2 text-xs space-y-1 text-gray-600">
                                         <p><span className="font-medium">Account:</span> {recipientAccount}</p>
@@ -741,10 +921,13 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         </div>
                     </div>
 
+                    {/* Payment Details Section */}
                     <div className="mt-6">
                         <h2 className="font-medium mb-3 text-gray-800">Payment Details</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            {/* Left Column */}
                             <div className="space-y-4">
+                                {/* Amount Input */}
                                 <div>
                                     <label htmlFor="amount" className="block mb-1 text-sm font-medium text-gray-700">Amount ({currency || '---'}) <span className="text-red-600">*</span></label>
                                     <div className="flex">
@@ -753,12 +936,12 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                             type="number"
                                             min="0"
                                             step="any"
-                                            className={`flex-1 p-2 border-l border-t border-b rounded-l text-sm ${errors.amount ? 'border-red-500' : 'border-gray-300'}`}
+                                            className={`flex-1 p-2 border-l border-t border-b rounded-l text-sm ${errors.amount ? 'border-red-500' : 'border-gray-300'} disabled:bg-gray-100 disabled:cursor-not-allowed`}
                                             placeholder="Enter amount to send"
                                             value={amount}
                                             onChange={(e) => {setAmount(e.target.value); setErrors(prev => ({ ...prev, amount: null }));}}
                                             required
-                                            disabled={!currency}
+                                            disabled={!currency} // Disable if no source account/currency selected
                                         />
                                         <span className={`inline-flex items-center px-3 p-2 border-r border-t border-b rounded-r border-l-0 bg-gray-100 text-gray-600 text-sm ${errors.amount ? 'border-red-500' : 'border-gray-300'}`}>
                                             {currency || '---'}
@@ -766,6 +949,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     </div>
                                     {renderError(errors.amount)}
                                 </div>
+                                {/* Settlement Speed (Readonly for On-Chain/Internal) */}
                                 {(paymentType === 'on-chain' || paymentType === 'internal') &&
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Settlement Speed</label>
@@ -773,7 +957,9 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     </div>
                                 }
                             </div>
+                            {/* Right Column */}
                             <div className="space-y-4">
+                                {/* Payment Date Selection */}
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Payment Date</label>
                                     <div className="flex space-x-2">
@@ -792,13 +978,14 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                             className={`flex-1 p-2 border rounded text-sm ${errors.scheduledDate ? 'border-red-500' : 'border-gray-300'} ${dateType !== 'scheduled' ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                                             value={scheduledDate}
                                             onChange={(e) => {setScheduledDate(e.target.value); setErrors(prev => ({ ...prev, scheduledDate: null })); }}
-                                            min={new Date().toISOString().split('T')[0]}
+                                            min={new Date().toISOString().split('T')[0]} // Prevent past dates
                                             disabled={dateType !== 'scheduled'}
                                             required={dateType === 'scheduled'}
                                         />
                                     </div>
                                     {renderError(errors.scheduledDate)}
                                 </div>
+                                {/* Purpose Dropdown */}
                                 <div>
                                     <label htmlFor="purpose" className="block mb-1 text-sm font-medium text-gray-700">Purpose <span className="text-red-600">*</span></label>
                                     <select
@@ -820,6 +1007,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         </div>
                     </div>
 
+                    {/* Payment Description */}
                     <div className="mt-4">
                         <label htmlFor="description" className="block mb-1 text-sm font-medium text-gray-700">Payment Description</label>
                         <textarea
@@ -832,45 +1020,57 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         ></textarea>
                     </div>
 
+                    {/* Preview Section */}
                     <div className="mt-6">
                         <h2 className="font-medium mb-3 text-gray-800">Preview (Estimated)</h2>
                         <div className="p-4 bg-gray-50 rounded border border-gray-200 text-sm">
-                            <div className="space-y-2">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Amount Sent:</span>
-                                    <span className="font-medium">{previewData.paymentAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} {previewData.currencySymbol || ''}</span>
+                            {amountNumber > 0 && currency ? ( // Only show preview details if amount and currency are set
+                                <div className="space-y-2">
+                                    {/* Amount Sent */}
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Amount Sent:</span>
+                                        <span className="font-medium">{renderReviewData().formatCurrency(previewData.paymentAmount, previewData.currencySymbol)}</span>
+                                    </div>
+                                    {/* FX Details (Client, Non-Internal Only) */}
+                                    {paymentOrigin === 'client' && paymentType !== 'internal' && previewData.exchangeRate && previewData.receivedAmount !== null && (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">FX Rate (Est.):</span>
+                                                <span className="text-xs">1 {previewData.currencySymbol || ''} ≈ {(previewData.exchangeRate ?? 0).toFixed(4)} {previewData.receivedCurrencySymbol || ''}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Received (Est.):</span>
+                                                <span className="font-medium">{renderReviewData().formatCurrency(previewData.receivedAmount, previewData.receivedCurrencySymbol)}</span>
+                                            </div>
+                                        </>
+                                    )}
+                                    {/* Estimated Fees */}
+                                    <div className="pt-2 mt-2 border-t border-dashed">
+                                        <h4 className="font-semibold text-gray-700 mb-1">Estimated Fees:</h4>
+                                        { renderReviewData().allFees.length > 0 ? (
+                                            renderReviewData().allFees.map((fee, index) => (
+                                                <div className="flex justify-between" key={index}>
+                                                    <span className="text-gray-600 pl-2">- {fee.label}:</span>
+                                                    <span className="font-medium">{fee.display || renderReviewData().formatCurrency(fee.value, previewData.currencySymbol)}</span>
+                                                </div>
+                                            ))
+                                         ) : (
+                                             <div className="text-gray-500 italic pl-2">None Estimated</div>
+                                         )}
+                                    </div>
+                                    {/* Total Debit */}
+                                    <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between font-semibold">
+                                        <span>Total Debit:</span>
+                                        <span>{renderReviewData().formatCurrency(previewData.total, previewData.currencySymbol)}</span>
+                                    </div>
                                 </div>
-                                {paymentOrigin === 'client' && paymentType !== 'internal' && previewData.exchangeRate && previewData.receivedAmount !== null && (
-                                    <>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">FX Rate (Est.):</span>
-                                            <span className="text-xs">1 {previewData.currencySymbol || ''} ≈ {(previewData.exchangeRate ?? 0).toFixed(4)} {previewData.receivedCurrencySymbol || ''}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">Received (Est.):</span>
-                                            <span className="font-medium">{previewData.receivedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.receivedCurrencySymbol || ''}</span>
-                                        </div>
-                                    </>
-                                )}
-                                <div className="pt-2 mt-2 border-t border-dashed">
-                                    <h4 className="font-semibold text-gray-700 mb-1">Estimated Fees:</h4>
-                                    { previewData.platformFee > 0 && <div className="flex justify-between"><span className="text-gray-600 pl-2">- Platform Fee:</span><span className="font-medium">{previewData.platformFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol}</span></div> }
-                                    { previewData.settlementFee > 0 && <div className="flex justify-between"><span className="text-gray-600 pl-2">- Settlement Fee:</span><span className="font-medium">{previewData.settlementFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol}</span></div> }
-                                    { previewData.networkFee > 0 && <div className="flex justify-between"><span className="text-gray-600 pl-2">- {paymentType === 'on-chain' ? 'Network Fee:' : 'Rail Fee:'}</span><span className="font-medium">{previewData.networkFeeDisplay ?? `${previewData.networkFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${previewData.currencySymbol}`}</span></div> }
-                                    { previewData.slippageFee > 0 && <div className="flex justify-between"><span className="text-gray-600 pl-2">- Slippage:</span><span className="font-medium">{previewData.slippageFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol}</span></div> }
-                                    { previewData.contractInteractionFee > 0 && !previewData.networkFeeDisplay?.includes('Interaction') && <div className="flex justify-between"><span className="text-gray-600 pl-2">- Contract Fee:</span><span className="font-medium">{previewData.contractInteractionFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol}</span></div> }
-                                    { previewData.fxSpreadFee > 0 && <div className="flex justify-between"><span className="text-gray-600 pl-2">- FX Spread:</span><span className="font-medium">{previewData.fxSpreadFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol}</span></div> }
-                                    { previewData.genericBankFee > 0 && <div className="flex justify-between"><span className="text-gray-600 pl-2">- Banking Fee:</span><span className="font-medium">{previewData.genericBankFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol}</span></div> }
-                                    { previewData.total === previewData.paymentAmount && previewData.platformFee <= 0 && <div className="text-gray-500 italic pl-2">None Estimated</div> }
-                                </div>
-                                <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between font-semibold">
-                                    <span>Total Debit:</span>
-                                    <span>{previewData.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {previewData.currencySymbol || ''}</span>
-                                </div>
-                            </div>
+                             ) : (
+                                 <p className="text-gray-500 italic">Enter an amount and select a source account to see a preview.</p>
+                             )}
                         </div>
                     </div>
 
+                    {/* Action Buttons */}
                     <div className="mt-8 flex space-x-3 justify-end">
                         <button
                             type="button"
@@ -881,8 +1081,9 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 rounded text-white hover:opacity-90 bg-emtech-gold disabled:opacity-50"
-                            disabled={Object.keys(errors).some(k => !!errors[k])}
+                            className="px-4 py-2 rounded text-white hover:opacity-90 bg-emtech-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                            // Disable if there are errors or if required fields for preview are missing
+                            disabled={Object.keys(errors).some(k => !!errors[k]) || !senderAccountId || !(amountNumber > 0)}
                         >
                             Continue to Review
                         </button>
@@ -895,7 +1096,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                 <div>
                     <h2 className="text-xl font-medium mb-4 text-gray-800">Review Payment</h2>
                     <p className="text-gray-600 mb-6">Please review the details below before proceeding to confirmation steps.</p>
-                    {renderReviewData()}
+                    {renderReviewData().jsx} {/* Call the function to get the JSX */}
                     <div className="mt-8 flex space-x-3 justify-between">
                         <button
                             type="button"
@@ -919,21 +1120,22 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
             {formStep === 'confirm' && (
                 <div>
                     <h2 className="text-xl font-medium mb-4 text-gray-800">Confirm Payment Initiation</h2>
-                    {renderReviewData()}
+                    {renderReviewData().jsx} {/* Call the function to get the JSX */}
+                    {/* Confirmation Status Box */}
                     <div className={`mt-6 p-4 border rounded-lg ${
                         workflowState === 'compliance_failed' ? 'bg-red-50 border-red-300'
                         : workflowState === '2fa_passed' ? 'bg-green-50 border-green-300'
                         : 'bg-blue-50 border-blue-300'
                       }`}>
                         <div className="flex items-start">
+                             {/* Status Icon */}
                             <div className="flex-shrink-0 mr-3">
-                                {/* Status Icon */}
-                                {workflowState === 'pending_compliance' || workflowState === 'pending_2fa' || isLoading ? (
+                                {isLoading ? (
                                     <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                ) : workflowState === 'compliance_passed' ? (
+                                ) : workflowState === 'compliance_passed' || workflowState === 'pending_2fa' ? (
                                     <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center">
                                         <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/>
@@ -953,6 +1155,7 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     </div>
                                 ) : null }
                             </div>
+                            {/* Status Message & Actions */}
                             <div className="flex-grow">
                                 <h3 className={`text-lg font-semibold mb-1 ${
                                     workflowState === 'compliance_failed' ? 'text-red-800'
@@ -965,10 +1168,12 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                     {isLoading ? 'Processing...' : workflowMessage || 'Initiating confirmation steps...'}
                                 </p>
 
+                                {/* Compliance Failed Message */}
                                 {workflowState === 'compliance_failed' && !isLoading && (
                                     <p className="text-red-700 font-medium text-sm">Please review the payment details or contact support.</p>
                                 )}
 
+                                {/* 2FA Input Section */}
                                 {workflowState === 'pending_2fa' && !isLoading && (
                                     <div className="mt-4 space-y-3">
                                         <div className="flex items-end space-x-3">
@@ -982,29 +1187,30 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                                                     value={twoFactorCode}
                                                     onChange={(e) => setTwoFactorCode(e.target.value)}
                                                     maxLength={6}
-                                                    disabled={!isCodeSent}
+                                                    disabled={!isCodeSent || isLoading} // Disable while loading or if code not sent
                                                 />
                                             </div>
                                             <button
                                                 type="button"
                                                 className={`px-3 py-2 border rounded text-sm whitespace-nowrap ${!isCodeSent ? 'bg-white border-gray-300 hover:bg-gray-50' : 'bg-gray-100 text-gray-500 cursor-not-allowed'}`}
                                                 onClick={handleSend2FACode}
-                                                disabled={isCodeSent}
+                                                disabled={isCodeSent || isLoading} // Disable if code sent or loading
                                             >
                                                 {isCodeSent ? 'Code Sent' : 'Send Code'}
                                             </button>
                                         </div>
                                         <button
                                             type="button"
-                                            className="w-full px-4 py-2 rounded text-white hover:opacity-90 bg-blue-600 disabled:opacity-50"
+                                            className="w-full px-4 py-2 rounded text-white hover:opacity-90 bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                             onClick={handleVerify2FA}
-                                            disabled={!isCodeSent || twoFactorCode.length !== 6}
+                                            disabled={!isCodeSent || twoFactorCode.length !== 6 || isLoading} // Disable if code not sent, wrong length, or loading
                                         >
                                             Verify Code
                                         </button>
                                     </div>
                                 )}
 
+                                {/* Final Confirmation Button */}
                                 {workflowState === '2fa_passed' && !isLoading && (
                                     <div className="mt-4 p-4 border-t border-gray-200">
                                         <p className="text-sm text-green-700 font-medium mb-4">All checks passed. Ready to initiate payment.</p>
@@ -1020,7 +1226,9 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                             </div>
                         </div>
                     </div>
+                    {/* Action Buttons for Confirmation Step */}
                     <div className="mt-8 flex space-x-3 justify-between">
+                        {/* Back to Review Button (conditional) */}
                         {(workflowState === 'idle' || workflowState === 'pending_compliance' || workflowState === 'pending_2fa') && !isLoading ? (
                             <button
                                 type="button"
@@ -1032,11 +1240,12 @@ const CreatePaymentScreen = ({ onBack, onPaymentSubmit, initialData = null }) =>
                         ) : (
                             <div/> // Placeholder to keep alignment
                         )}
+                         {/* Cancel / Back to Edit Button */}
                          <button
                             type="button"
-                            className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50"
+                            className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={handleBackToDetails}
-                            disabled={isLoading}
+                            disabled={isLoading} // Disable if any async operation is in progress
                          >
                              Cancel / Back to Edit
                          </button>

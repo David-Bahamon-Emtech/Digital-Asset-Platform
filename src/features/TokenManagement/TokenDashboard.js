@@ -136,23 +136,23 @@ const TokenDashboard = ({ assetLogos = {}, blockchainLogos = {} }) => {
         derivedLogoPath = wizardTypeToLogoMap[wizCurrencySubType] || wizardTypeToLogoMap['Currency-Other'];
         if (wizCurrencySubType === 'Asset Backed Stablecoin') derivedAssetClass = 'Stablecoin';
         else if (wizCurrencySubType === 'CBDC') derivedAssetClass = 'CBDC';
-        else if (wizCurrencySubType === 'Cryptocurrency') derivedAssetClass = 'CryptoCurrency';
+        else if (wizCurrencySubType === 'Cryptocurrency') derivedAssetClass = 'Cryptocurrency';
     } else if (wizTokenType === 'RWA') {
         derivedLogoPath = wizardTypeToLogoMap[wizRwaSubType] || wizardTypeToLogoMap['RWA-Other'];
         derivedAssetClass = 'RWA'; // Generic RWA, specific below
-        if (wizRwaSubType?.toLowerCase().includes('gold')) { derivedAssetClass = 'Commodity-PreciousMetal'; derivedPhysicality = 'Physical'; derivedCustodyType = 'PhysicalVault'; }
-        else if (wizRwaSubType?.toLowerCase().includes('silver')) { derivedAssetClass = 'Commodity-PreciousMetal'; derivedPhysicality = 'Physical'; derivedCustodyType = 'PhysicalVault'; }
-        else if (wizRwaSubType?.toLowerCase().includes('oil')) { derivedAssetClass = 'Commodity-Energy'; }
+        if (wizRwaSubType?.toLowerCase().includes('gold')) { derivedAssetClass = 'Commodity: Precious Metal'; derivedPhysicality = 'Physical'; derivedCustodyType = 'PhysicalVault'; }
+        else if (wizRwaSubType?.toLowerCase().includes('silver')) { derivedAssetClass = 'Commodity: Precious Metal'; derivedPhysicality = 'Physical'; derivedCustodyType = 'PhysicalVault'; }
+        else if (wizRwaSubType?.toLowerCase().includes('oil')) { derivedAssetClass = 'Commodity: Energy'; }
         else if (wizRwaSubType?.toLowerCase().includes('real estate')) { derivedAssetClass = 'RealEstate'; derivedPhysicality = 'Physical'; derivedCustodyType = 'External'; }
-        else if (wizRwaSubType?.toLowerCase().includes('carbon credit')) { derivedAssetClass = 'CarbonCredit'; }
+        else if (wizRwaSubType?.toLowerCase().includes('carbon credit')) { derivedAssetClass = 'Carbon Credit'; }
     } else if (wizTokenType === 'CapitalAsset') {
         derivedLogoPath = wizardTypeToLogoMap[wizCapitalAssetSubType] || wizardTypeToLogoMap['CapitalAsset-Other'];
         derivedAssetClass = 'Security'; // Generic Security, specific below
-        if (wizCapitalAssetSubType?.toLowerCase().includes('stock')) derivedAssetClass = 'Security-Stock';
-        else if (wizCapitalAssetSubType?.toLowerCase().includes('bond')) derivedAssetClass = 'Security-Bond';
-        else if (wizCapitalAssetSubType?.toLowerCase().includes('money market fund')) derivedAssetClass = 'Security-MMF';
-        else if (wizCapitalAssetSubType?.toLowerCase().includes('commercial paper')) derivedAssetClass = 'Security-CP';
-        else if (wizCapitalAssetSubType?.toLowerCase().includes('treasury bill')) derivedAssetClass = 'Security-Bond';
+        if (wizCapitalAssetSubType?.toLowerCase().includes('stock')) derivedAssetClass = 'Security: Stock';
+        else if (wizCapitalAssetSubType?.toLowerCase().includes('bond')) derivedAssetClass = 'Security: Bond';
+        else if (wizCapitalAssetSubType?.toLowerCase().includes('money market fund')) derivedAssetClass = 'Security: MMF';
+        else if (wizCapitalAssetSubType?.toLowerCase().includes('commercial paper')) derivedAssetClass = 'Security: CP';
+        else if (wizCapitalAssetSubType?.toLowerCase().includes('treasury bill')) derivedAssetClass = 'Security: Bond';
     } else { // Default/Other
         derivedLogoPath = wizardTypeToLogoMap['Other'] || wizardTypeToLogoMap['DEFAULT'];
     }

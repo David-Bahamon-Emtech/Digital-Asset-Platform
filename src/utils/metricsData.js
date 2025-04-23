@@ -40,7 +40,7 @@ export const getReserveComposition = (asset, detailedReserveDataMap) => {
 };
 
 export const getAlertThreshold = (asset) => {
-  if (!asset) return defaultAlertThreshold; let threshold = defaultAlertThreshold; const stableClasses = ['Stablecoin', 'CBDC', 'Security-MMF']; const backedClasses = ['Commodity-PreciousMetal', 'Commodity-Energy', 'CarbonCredit', 'Security-CP', 'Security-Bond']; if (stableClasses.includes(asset.assetClass) || backedClasses.includes(asset.assetClass)) { threshold = 100; } else if (asset.isWizardIssued && asset.wizardData?.reserveDetails?.isBackedAsset) { threshold = 100; } else if (asset.assetClass === 'CryptoCurrency' || !asset.assetClass) { threshold = 0; } return threshold;
+  if (!asset) return defaultAlertThreshold; let threshold = defaultAlertThreshold; const stableClasses = ['Stablecoin', 'CBDC', 'Security: MMF']; const backedClasses = ['Commodity: Precious Metal', 'Commodity: Energy', 'Carbon Credit', 'Security: CP', 'Security: Bond']; if (stableClasses.includes(asset.assetClass) || backedClasses.includes(asset.assetClass)) { threshold = 100; } else if (asset.isWizardIssued && asset.wizardData?.reserveDetails?.isBackedAsset) { threshold = 100; } else if (asset.assetClass === 'Cryptocurrency' || !asset.assetClass) { threshold = 0; } return threshold;
 };
 
 export const generateCirculationHistory = (asset, tokenHistory = []) => {

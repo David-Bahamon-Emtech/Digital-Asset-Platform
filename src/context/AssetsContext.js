@@ -45,10 +45,22 @@ const initialClientAccounts = generateDummyClientAccounts(30);
 const combinedInitialAccounts = [...processedInstitutionalAssets, ...initialClientAccounts];
 const initialAssetsState = { assets: combinedInitialAccounts };
 
+// --- Define Action Types --- NEW: Added DECREASE_CIRCULATION
+const ActionTypes = {
+    ADD_ASSET: 'ADD_ASSET',
+    UPDATE_ASSET_BALANCE: 'UPDATE_ASSET_BALANCE',
+    DECREASE_CIRCULATION: 'DECREASE_CIRCULATION', // <-- NEW ACTION TYPE
+    MINT_ASSET: 'MINT_ASSET',
+    BURN_ASSET: 'BURN_ASSET',
+    REDEEM_ASSET: 'REDEEM_ASSET',
+    UPDATE_ASSET_PROPERTY: 'UPDATE_ASSET_PROPERTY',
+    SET_ASSETS: 'SET_ASSETS',
+};
+
 // --- Reducer function to manage asset state ---
 const assetsReducer = (state, action) => {
     switch (action.type) {
-        case 'ADD_ASSET': {
+        case ActionTypes.ADD_ASSET: { // Using ActionTypes enum
             if (state.assets.some(asset => asset.id === action.payload.id || asset.symbol === action.payload.symbol)) {
                 console.warn(`Asset with ID ${action.payload.id} or Symbol ${action.payload.symbol} already exists.`);
                 return state;
@@ -78,7 +90,7 @@ const assetsReducer = (state, action) => {
             return { ...state, assets: [...state.assets, newAssetPayload] };
         }
 
-        case 'UPDATE_ASSET_BALANCE': {
+        case ActionTypes.UPDATE_ASSET_BALANCE: { // Using ActionTypes enum
             const { assetId, changeAmount } = action.payload;
             if (!assetId || typeof changeAmount !== 'number' || isNaN(changeAmount)) {
                 console.error('Invalid payload for UPDATE_ASSET_BALANCE:', action.payload);
@@ -86,8 +98,16 @@ const assetsReducer = (state, action) => {
             }
             const updatedAssets = state.assets.map(asset => {
                 if (asset.id === assetId) {
-                    const newBalance = Math.max(0, (asset.balance || 0) + changeAmount);
-                    console.log(`Updating balance for ${asset.symbol}: ${asset.balance} -> ${newBalance} (Change: ${changeAmount})`);
+                    const newBalance = Math.max(0, (asset.balance || 0) + changeAmount); // Simple add/subtract from balance
+                    console.log(`Updating balance (circulation) for ${asset.symbol}: ${asset.balance} -> ${newBalance} (Change: ${changeAmount})`);
+                    // Ensure balance doesn't exceed total supply if finite
+                    if (asset.supply === 'Finite' && typeof asset.totalSupplyIssued === 'number') {
+                        const adjustedNewBalance = Math.min(newBalance, asset.totalSupplyIssued);
+                        if (adjustedNewBalance !== newBalance) {
+                             console.warn(`[UPDATE_ASSET_BALANCE] Clamped balance for ${asset.symbol} to total supply (${asset.totalSupplyIssued}).`);
+                        }
+                        return { ...asset, balance: adjustedNewBalance };
+                    }
                     return { ...asset, balance: newBalance };
                 }
                 return asset;
@@ -95,8 +115,29 @@ const assetsReducer = (state, action) => {
             return { ...state, assets: updatedAssets };
         }
 
+        // ***** START NEW CASE for DECREASE_CIRCULATION *****
+        case ActionTypes.DECREASE_CIRCULATION: {
+            const { assetId, amountToDecrease } = action.payload;
+            if (!assetId || typeof amountToDecrease !== 'number' || isNaN(amountToDecrease) || amountToDecrease <= 0) {
+                 console.error('Invalid payload for DECREASE_CIRCULATION:', action.payload);
+                 return state;
+            }
+            const updatedAssets = state.assets.map(asset => {
+                 if (asset.id === assetId) {
+                     const currentBalance = asset.balance || 0;
+                     const newBalance = Math.max(0, currentBalance - amountToDecrease);
+                     console.log(`Decreasing circulation for ${asset.symbol}: ${currentBalance} -> ${newBalance} (-${amountToDecrease}). Total supply (${asset.totalSupplyIssued}) unchanged.`);
+                     return { ...asset, balance: newBalance }; // ONLY update balance
+                 }
+                 return asset;
+             });
+            return { ...state, assets: updatedAssets };
+        }
+        // ***** END NEW CASE for DECREASE_CIRCULATION *****
+
+
         // *** MINT_ASSET: Corrected - ONLY updates totalSupplyIssued and reserve account ***
-        case 'MINT_ASSET': {
+        case ActionTypes.MINT_ASSET: { // Using ActionTypes enum
             const { assetId, amount } = action.payload;
             if (!assetId || typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
                 console.error('Invalid payload for MINT_ASSET:', action.payload);
@@ -147,7 +188,7 @@ const assetsReducer = (state, action) => {
         }
 
         // *** BURN_ASSET: Update reserve ONLY (don't change circulation) ***
-        case 'BURN_ASSET': {
+        case ActionTypes.BURN_ASSET: { // Using ActionTypes enum
             const { assetId, amount } = action.payload;
             if (!assetId || typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
                 console.error('Invalid payload for BURN_ASSET:', action.payload);
@@ -161,9 +202,9 @@ const assetsReducer = (state, action) => {
                         const newBalance = asset.balance || 0;
                         // Only decrease total supply
                         const newTotalSupplyIssued = Math.max(0, asset.totalSupplyIssued - amount);
-                        
+
                         let updatedReserveData = asset.reserveData ? { ...asset.reserveData } : undefined;
-                        
+
                         // Update reserve account balance
                         if (updatedReserveData?.accounts?.length > 0) {
                             const updatedAccounts = updatedReserveData.accounts.map((acc, index) => {
@@ -189,9 +230,9 @@ const assetsReducer = (state, action) => {
                         } else {
                             console.warn(`[BURN] No reserve accounts found for finite asset ${asset.symbol}.`);
                         }
-                        
+
                         console.log(`Burning ${amount} ${asset.symbol}: Balance ${asset.balance} -> ${newBalance} (Unchanged), TotalIssued ${asset.totalSupplyIssued} -> ${newTotalSupplyIssued}`);
-                        
+
                         // Return updated asset with UNCHANGED balance
                         return { ...asset, balance: newBalance, totalSupplyIssued: newTotalSupplyIssued, reserveData: updatedReserveData };
                     } else {
@@ -201,12 +242,12 @@ const assetsReducer = (state, action) => {
                 }
                 return asset;
             });
-            
+
             return { ...state, assets: updatedAssets };
         }
 
         // *** NEW REDEEM_ASSET case: burns tokens on redemption ***
-        case 'REDEEM_ASSET': {
+        case ActionTypes.REDEEM_ASSET: { // Using ActionTypes enum
             const { assetId, amount } = action.payload;
             if (!assetId || typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
                 console.error('Invalid payload for REDEEM_ASSET:', action.payload);
@@ -246,18 +287,18 @@ const assetsReducer = (state, action) => {
                             updatedReserveData.accounts = updatedAccounts;
                         }
                     }
-                    
+
                     console.log(`Redeeming ${amount} ${asset.symbol}: Balance ${asset.balance} -> ${newBalance}, TotalIssued ${asset.totalSupplyIssued} -> ${newTotalSupplyIssued}`);
-                    
+
                     return { ...asset, balance: newBalance, totalSupplyIssued: newTotalSupplyIssued, reserveData: updatedReserveData };
                 }
                 return asset;
             });
-            
+
             return { ...state, assets: updatedAssets };
         }
 
-        case 'UPDATE_ASSET_PROPERTY': {
+        case ActionTypes.UPDATE_ASSET_PROPERTY: { // Using ActionTypes enum
             const { assetId, propertyName, propertyValue } = action.payload;
             if (!assetId || !propertyName) {
                 console.error('Invalid payload for UPDATE_ASSET_PROPERTY:', action.payload);
@@ -271,7 +312,7 @@ const assetsReducer = (state, action) => {
             };
         }
 
-        case 'SET_ASSETS': {
+        case ActionTypes.SET_ASSETS: { // Using ActionTypes enum
             if (!Array.isArray(action.payload)) {
                 console.error('Invalid payload for SET_ASSETS: Payload must be an array.');
                 return state;
@@ -280,6 +321,7 @@ const assetsReducer = (state, action) => {
         }
 
         default:
+             console.warn(`[AssetsContext] Unhandled action type: ${action.type}`);
             return state;
     }
 };

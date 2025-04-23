@@ -1,51 +1,102 @@
-# Digital-Asset-Platform V 0.7 
+# Digital-Asset-Platform V 0.8 
 
 A React-based front-end demonstration platform for managing digital assets and simulating various payment flows. Showcases token lifecycle management (issuance, minting, burning, redeeming, reserves) and payment operations (cross-border, high-value transfers, bulk payments). Built using React and Tailwind CSS.
 
+Major Changes from V 0.7 
+
+This updated version introduces significant architectural changes and new top-level features. The most notable architectural shift is the adoption of the React Context API for state management, replacing the previous reliance on prop drilling. This is evident through the introduction of multiple context providers wrapped around the application in App.js, such as AssetsProvider, PaymentHistoryProvider, TokenHistoryProvider, TemplatesProvider, RecurringPaymentsProvider, ActiveBulkProvider, and AssetOrdersProvider. Functionally, the application has expanded with several new core sections accessible via the sidebar:
+
+    * Treasury Management: A new dedicated section for treasury operations, including viewing treasury assets, managing asset orders (sales of platform-issued tokens) swapping tokens, and redeeming tokens.
+    * Account Management: Provides capabilities for user administration, role-based access control (RBAC), API key management, security settings, audit logs, and third-party account integration.
+    * Compliance Center: Focuses on regulatory adherence, featuring tools for transaction monitoring, KYC/AML process overview, risk management configuration, regulatory reporting generation, alert/case management, and sanctions screening.
+
+Existing features have also seen substantial enhancements and refinements. The Token Management module, now centered around TokenDashboard.js, features a significantly more detailed Token Issuance Wizard with granular steps for defining token types (RWA, Capital Asset, Currency), supply details, extensive reserve configurations (Bank, Contract, Custodian, On-Chain Wallet), regulatory info, token custody, and permissions like fees with recipient allocation and expiration. The token lifecycle actions have been refined:
+
+    * Minting/Burning: Now clearly distinguishes changes in circulating supply (balance) versus total issued supply, particularly for finite assets, with updates reflected in the AssetsContext. Burning specifically targets the reserve pool.
+    * Redemption/Swapping: Dedicated screens (RedeemTokenScreen, SwapTokenScreen) handle redeeming tokens for underlying value or swapping between platform/treasury assets, including simulated smart contract execution steps.
+    * Reserve Management: The ReserveManagementScreen dynamically displays detailed reserve composition and accounts sourced from AssetsContext, moving beyond previously static or simpler dummy data structures.
+    * Asset Orders: Introduced as part of Treasury, this allows creating and managing orders for selling platform-issued assets, tracked via AssetOrdersContext. The Payments section sees the addition of bulk payment template creation and the ability to edit active bulk files. HVT authorization includes a simulated login gate. The underlying state for payment history, templates, and recurring payments is now managed via dedicated contexts.
+
 ## Features
 
-* **Token Management:**
-    * Dashboard overview of token assets.
-    * Detailed view for individual assets (handling both wizard-issued and predefined types).
-    * Workflow for issuing new token types via a multi-step wizard (Token Details, Supply/Reserves/Metadata, Permissions, Finalization).
-    * Workflow for minting additional units of existing tokens (with simulated Treasury approval).
-    * Workflow for burning (destroying) existing tokens (with simulated Compliance & Treasury approval).
-    * Workflow for redeeming/swapping tokens (with simulated multi-step approval and optional smart contract execution simulation).
-    * Reserve Management view displaying simulated/derived reserve data (Circulation, Ratio, Composition, Accounts) and allowing alert configuration.
-    * Simulated pause/unpause functionality for wizard-issued tokens (with simulated Pauser Role approval).
-    * Local audit history log for token actions with detail view.
-* **Payments:**
-    * Central dashboard with navigation for Cross-Border, High-Value, and Bulk payments.
-    * Dedicated dashboard views for each payment category displaying relevant metrics (static placeholders) and recent history.
-    * Comprehensive Payment Creation screen supporting:
+**Token Management:** Governed by `TokenDashboard.js`, using `AssetsContext` for state and `TokenHistoryContext` for logging.
+    * Dashboard overview of *managed* token assets (wizard-issued or specific predefined types like ACP, MMFUSD, XAGC, WTOIL, VCC). Includes `TokenMetricsDashboard` showing aggregate metrics, reserve ratios, and a monthly circulation/reserve chart.
+    * Detailed view (`AssetDetailView.js`) for individual assets, adapting content for wizard-issued vs. predefined types.
+    * Workflow for issuing new token types via a multi-step wizard (`TokenIssuanceWizard.js`):
+        * Define Token Details (Name, Symbol, Blockchain, Type: RWA, Capital Asset, Currency + Subtypes).
+        * Configure Supply (Initial, Finite/Infinite, Decimals), Metadata, and Market Value.
+        * Configure Reserves (if asset-backed): Select backing method (Bank, Smart Contract, Custodian, On-Chain Wallet) and connect/verify details.
+        * Configure Permissions & Features: KYC requirements (Levels), Fee Schedules (Percentage/Flat, Recipient Allocation), Pausable status, Fungibility, Expiration Date, Role Assignments (Minter, Burner, Pauser, etc.).
+        * Specify Regulatory Information (Jurisdiction, Regulator).
+        * Define Token Custody Arrangement (Self vs. Third-Party).
+        * Includes simulated multi-step approval workflow (Compliance, Management).
+    * Workflow for minting additional units of existing finite tokens (`MintExistingToken.js`): Increases `totalSupplyIssued` and updates reserve data (simulated check); *does not* directly increase circulating supply (`balance`). Includes simulated Treasury approval.
+    * Workflow for burning (destroying) existing finite tokens (`BurnTokenScreen.js`): Decreases `totalSupplyIssued` and updates reserve data; *does not* directly decrease circulating supply (`balance`). Includes simulated Compliance & Treasury approval.
+    * Workflow for redeeming tokens (`RedeemTokenScreen.js`): *Decreases both* circulating supply (`balance`) and `totalSupplyIssued`. Allows specifying payout currency (for eligible types) or redeeming for underlying value. Includes simulated multi-step approval and optional smart contract execution simulation.
+    * Workflow for swapping tokens (`SwapTokenScreen.js`): Allows swapping between Treasury assets and platform-issued tokens (affects circulating `balance`). Includes simulated multi-step approval and optional smart contract execution simulation.
+    * Reserve Management view (`ReserveManagementScreen.js`): Displays *dynamic* reserve data from `AssetsContext` (Total Issued, Circulation, Ratio, Composition, Accounts) and allows configuration of reserve ratio alert thresholds.
+    * Simulated pause/unpause functionality for wizard-issued tokens (`AssetDetailView.js` workflow) with simulated Pauser Role approval.
+    * Token action history log managed via `TokenHistoryContext`, with details viewable in a modal (`HistoryDetailModal.js`).
+
+* **Payments:** Orchestrated by `PaymentsDashboard.js`, utilizing contexts (`PaymentHistoryContext`, `TemplatesContext`, `RecurringPaymentsContext`, `ActiveBulkContext`) for state.
+    * Central dashboard with tab navigation for Cross-Border, High-Value, and Bulk payments.
+    * Dedicated dashboard views (`CrossBorderDashboardView.js`, `HighValueDashboardView.js`, `BulkDashboardView.js`) for each payment category displaying relevant metrics (placeholders) and recent history via `PaymentHistoryTable`.
+    * Comprehensive Payment Creation screen (`CreatePaymentScreen.js`) supporting:
         * Payment Origins: Institutional, Client.
         * Payment Types: On-Chain, Traditional, Internal Transfer.
         * Detailed fee and FX rate calculation previews.
         * Simulated Compliance check and 2FA workflow for final submission.
-    * Dedicated screen for initiating High-Value Transfers (HVT) with a multi-step process.
-    * HVT Authorization screen for reviewing and approving/rejecting pending HVTs.
-    * Detailed view for individual HVT records.
-    * Bulk Payment file upload screen (with simulated validation and processing).
-    * Bulk Payment add template functionality. 
-    * Payment Template management (View, Filter, Search, Create, Edit, Delete, Use for new payments).
-    * Recurring Payment management (View List/Calendar, Setup, Edit, Pause/Resume, Delete).
-  **Custody Management:**
-    * Dashboard overview of assets under custody.
-    * Summary cards for Physical Vaults, Digital Vaults (Hot/Warm), and Cold Storage, showing aggregated values and counts based on asset metadata.
-    * Recent Vault Operations log display (using dynamic dummy data).
-    * Vault Analytics section showing simulated asset allocation and KPIs.
-    * Quick Actions section (Initiate Deposit, Request Withdrawal, Schedule Audit, Generate Report).
-    * Navigation to detailed views for:
-        * Generating Custody Reports (form based on old UI).
-        * Managing Pending Approvals (displaying requests, placeholder approve/reject actions).
-        * Viewing assets in Cold Storage (with placeholder transfer-out form).
-        * Viewing assets in Physical Vaults (with placeholder audit request action).
-        * Viewing assets in Digital Vaults (Hot/Warm) (with placeholder rebalance action).
-        * Initiating Deposits (form).
-        * Requesting Withdrawals (form, triggers dummy approval).
-        * Scheduling Audits (form).
-        * Viewing the Full Operations Log (with basic filtering).
-    * Uses dynamic state for logs and approvals for interactive demo.
+    * Dedicated screen for initiating High-Value Transfers (HVT) (`CreateHighValueTransferScreen.js`) with a multi-step process and specific HVT policy rules.
+    * HVT Authorization screen (`AuthorizeHVTScreen.js`) for reviewing and approving/rejecting pending HVTs (individual or batch), featuring a simulated login gate.
+    * Detailed view (`ViewTransferDetailsScreen.js`) for individual HVT records.
+    * Bulk Payment file upload screen (`UploadBulkFileScreen.js`) with simulated validation and processing, submitting files to the active queue (`ActiveBulkContext`).
+    * Active Bulk File management (`BulkDashboardView.js` integrating `ActiveBulkFilesTable.js`): View active/processing bulk files, view details (`ActiveBulkDetailModal.js`), edit schedule/metadata (`EditBulkFileScreen.js`), and cancel/delete files. Includes summary stats (`BulkSummaryStats.js`).
+    * Bulk Payment Template creation (`CreateBulkTemplateScreen.js`): Define reusable templates for bulk files, including file format, field mappings, validation rules, and processing options.
+    * Payment Template management (`ViewTemplatesScreen.js`): View, Filter, Search, Create/Edit (`CreateEditTemplateModal.js`), Delete, and Use templates for new single payments.
+    * Recurring Payment management (`ManageRecurringPaymentsScreen.js`): View List/Calendar, Setup/Edit (`RecurringPaymentModal.js`
+
+  * **Custody Management:** Orchestrated by `CustodyDashboard.js`, using `AssetsContext` for asset data and local state for logs/approvals.
+    * Dashboard overview displaying aggregated values and counts for Physical, Digital (Hot/Warm), and Cold storage tiers via `VaultTypeSummaryCard`.
+    * Recent Vault Operations log display using `VaultOperationsLogTable`.
+    * Vault Analytics section (`VaultAnalytics.js`) showing asset allocation (calculated from `AssetsContext`) and static KPIs.
+    * Quick Actions section (`VaultQuickActions.js`) for initiating Deposit, Withdrawal, Audit, and Report generation.
+    * Navigation to detailed views/forms:
+        * `CustodyReporting.js`: Generate custody reports (form based on old UI).
+        * `ApprovalQueue.js`: Manage pending custody approvals (displays requests, handles approve/reject actions which update logs and potentially `AssetsContext`).
+        * `ColdStorageView.js`: View assets in Cold Storage; includes form to initiate transfers out (triggers approval request).
+        * `PhysicalVaultsView.js`: View assets in Physical Vaults; includes action to request audits.
+        * `DigitalVaultsView.js`: View assets in Digital Vaults (Hot/Warm); includes action to initiate rebalancing transfers (triggers approval request).
+        * `InitiateDepositForm.js`: Form to record new deposits (updates `AssetsContext` and logs).
+        * `RequestWithdrawalForm.js`: Form to request withdrawals (adds item to approval queue and logs).
+        * `ScheduleAuditForm.js`: Form to schedule audits (adds entry to logs).
+        * `FullOperationsLogView.js`: View the complete operations log with basic filtering.
+
+* **Treasury Management:** Orchestrated by `TreasuryDashboard.js`, using `AssetsContext` and `AssetOrdersContext`.
+    * Dashboard overview of core treasury assets (e.g., USDC, USDT, T-BOND, e-Cedi, D-EUR) and key actions.
+    * Workflow for redeeming platform-issued tokens (`RedeemTokenScreen.js`) for underlying value or specified fiat currency, including simulated approval and smart contract execution.
+    * Workflow for swapping between treasury assets and platform-issued tokens (`SwapTokenScreen.js`), affecting circulating balances and reserves, including simulated approval and smart contract execution.
+    * Asset Order Management:
+        * View list of asset orders (`AssetOrdersListView.js`), currently focused on *Sales* of platform-issued tokens (debiting from Reserve). Includes filtering and quick approve/reject actions.
+        * Create new asset orders (`CreateAssetOrderScreen.js`), currently supporting *Sales* of platform-issued tokens (specifying asset, amount, rate, payment asset, and accounts). Submits orders to `AssetOrdersContext` with 'Pending Approval' status.
+        * View detailed information for a specific asset order in a modal (`AssetOrderDetailModal.js`), including dummy approval/status history.
+    * Detailed view for core treasury 
+    
+* **Account Management:** *(Placeholder - Needs update)*
+    * User & Profile Management (View, Add, Edit, Deactivate).
+    * Role-Based Access Control (RBAC) definition and assignment.
+    * API Key Management (Generate, Manage, Revoke, Scope Permissions).
+    * Security Settings (MFA, Password Policy, Session Timeouts).
+    * Audit Log access.
+    * 3rd Party Account Management (Register Apps, Define Scopes, Monitor).
+
+* **Compliance Center:** *(Placeholder - Needs update)*
+    * Transaction Monitoring configuration and oversight.
+    * KYC/AML Process management and review.
+    * Risk Management configuration (Limits, Counterparty Risk).
+    * Regulatory Reporting generation (SARs, etc.).
+    * Alerts & Case Management for compliance events.
+    * Sanctions Screening configuration and review.
+
 * **Common UI:**
     * Consistent layout with a sidebar navigation.
     * Reusable modal dialogs for details (Payment History, Token History), creation/editing (Templates, Recurring Payments).
@@ -55,14 +106,14 @@ A React-based front-end demonstration platform for managing digital assets and s
 ## Tech Stack
 
 * **Frontend Library:** React.js
+* **State Management:** React Context API
 * **Styling:** Tailwind CSS
 * **Language:** JavaScript (ES6+)
 * **Date Utility:** `date-fns`
 * **Calendar:** `react-big-calendar` (for Recurring Payments view)
+* **Charts:** `recharts` (for Token Metrics)
 
 ## File Breakdown
-
-Here's a summary of each analyzed file:
 
 **Core Application:**
 
@@ -70,66 +121,32 @@ Here's a summary of each analyzed file:
 * `src/App.css`: Contains default CSS, likely including the base styles from Create React App and potentially global custom styles.
 
 **Reusable Components:**
+* `src/components/Layout/Layout.js`: Defines the main application structure (Sidebar + Content Area).
+* `src/components/Sidebar/Sidebar.js`: Renders the navigation sidebar with links and icons.
+* `src/components/Logo/EmtechLogo.js` (Inferred): Simple component to display the company logo.
+* `src/features/Payments/PaymentHistoryTable.js`: Reusable table for displaying payment history entries.
+* `src/features/Payments/PaymentHistoryDetailModal.js`: Modal dialog for showing detailed payment history.
+* `src/features/TokenManagement/HistoryDetailModal.js`: Modal dialog for showing generic token action history details.
+* `src/features/Payments/CreateEditTemplateModal.js`: Modal dialog with a form for creating/editing single payment templates.
+* `src/features/Payments/RecurringPaymentModal.js`: Modal dialog with a form for setting up/editing recurring payments.
+* `src/features/Payments/ActiveBulkDetailModal.js`: Modal dialog for showing details of an active bulk payment file.
+* `src/features/Treasury/AssetOrderDetailModal.js`: Modal dialog for showing detailed asset order information.
+* `src/features/Custody/VaultOperationsLogTable.js`: Reusable table for displaying custody operations log entries.
+* `src/features/Custody/VaultTypeSummaryCard.js`: Reusable card for displaying summary info for vault types (Physical, Digital, Cold).
+* `src/features/Custody/VaultAnalytics.js`: Reusable component displaying custody asset allocation charts and KPIs.
+* `src/features/Custody/VaultQuickActions.js`: Reusable component displaying common custody action buttons.
+* `src/features/TokenManagement/MonthlyStackedBarChart.js`: Reusable chart component (using `recharts`) for displaying monthly stacked bar data (e.g., circulation vs. reserve).
+* `src/features/Payments/OnChainPaymentFields.js`: Reusable component containing form fields specific to on-chain payments.
+* `src/features/Payments/TraditionalPaymentFields.js`: Reusable component containing form fields specific to traditional payments.
 
-* `src/components/Layout/Layout.js`: Defines the main application structure with a fixed `Sidebar` and a main content area where feature components are rendered.
-* `src/components/Sidebar/Sidebar.js`: Renders the navigation sidebar, displaying links, icons, the company logo, and highlighting the active section. Uses custom Tailwind variables for theming.
-* `src/components/Logo/EmtechLogo.js` (Inferred): A simple component to display the company logo image consistently.
-* `src/features/Payments/PaymentHistoryTable.js`: A reusable table component to display payment history entries, used across various payment dashboards. Shows a limited number of entries by default.
-* `src/features/Payments/PaymentHistoryDetailModal.js`: A modal dialog to show the detailed breakdown of a selected payment history entry, parsing `rawData`.
-* `src/features/TokenManagement/HistoryDetailModal.js`: A simpler modal dialog to display details of a generic token management history/audit log entry.
-* `src/features/Payments/CreateEditTemplateModal.js`: A modal dialog containing a form for creating or editing payment templates.
-* `src/features/Payments/RecurringPaymentModal.js`: A modal dialog containing a form for setting up or editing recurring payment schedules.
-
-**Features - Payments:**
-
-* `src/features/Payments/PaymentsDashboard.js`: The central container/controller for the Payments feature. Manages navigation between payment sub-screens, orchestrates actions (payment submission, template/recurring management, HVT auth), manages local state for templates & recurring payments, and renders the appropriate view.
-* `src/features/Payments/CrossBorderDashboardView.js`: Dashboard view focused on general cross-border payments, providing action cards, metrics (placeholders), and recent history via `PaymentHistoryTable`.
-* `src/features/Payments/HighValueDashboardView.js`: Dashboard view focused on High-Value Transfers (HVT), providing HVT-specific action cards, metrics (placeholders), and recent HVT history via `PaymentHistoryTable`.
-* `src/features/Payments/BulkDashboardView.js`: Dashboard view focused on Bulk Payments, providing action cards, metrics (placeholders), and recent bulk history via `PaymentHistoryTable`.
-* `src/features/Payments/CreatePaymentScreen.js`: A complex multi-step form for initiating various payment types (On-Chain, Traditional, Internal) for different origins (Institutional, Client). Includes fee/FX preview calculations and a simulated 2FA workflow.
-* `src/features/Payments/OnChainPaymentFields.js`: Sub-component rendered within `CreatePaymentScreen` for on-chain specific fields (Network selection/display).
-* `src/features/Payments/TraditionalPaymentFields.js`: Sub-component rendered within `CreatePaymentScreen` for traditional specific fields (Rail, Settlement Speed).
-* `src/features/Payments/CreateHighValueTransferScreen.js`: A multi-step form specifically for initiating High-Value Transfers (HVTs).
-* `src/features/Payments/AuthorizeHVTScreen.js`: Screen displaying a queue of pending HVTs, allowing users to review, authorize, or reject them individually or in batches (interacts with parent via callbacks).
-* `src/features/Payments/UploadBulkFileScreen.js`: Screen for uploading bulk payment files, including simulated file selection, validation, configuration, and submission.
-* `src/features/Payments/ViewTemplatesScreen.js`: Screen for managing payment templates (View, Filter, Search, Create/Edit via modal, Delete, Use). Manages template data locally.
-* `src/features/Payments/ManageRecurringPaymentsScreen.js`: Screen for managing recurring payment schedules, offering both list and calendar (`react-big-calendar`) views. Manages recurring payment data locally.
-* `src/features/Payments/ViewTransferDetailsScreen.js`: Screen displaying a detailed, read-only view of a single HVT record.
-
-**Features - Token Management:**
-
-* `src/features/TokenManagement/TokenDashboard.js`: The central container/controller for the Token Management feature. Manages navigation, orchestrates actions (issue, mint, burn, redeem), manages a local history log, and renders the appropriate view. Handles core asset state updates via the `setAssets` prop.
-* `src/features/TokenManagement/IssuanceChoiceScreen.js`: A simple navigation screen allowing users to choose between issuing a new token or minting an existing one.
-* `src/features/TokenManagement/TokenIssuanceWizard.js`: A complex, multi-step wizard guiding users through the definition and configuration of a new token type, including a simulated approval workflow.
-* `src/features/TokenManagement/MintExistingToken.js`: Screen/form for minting additional units of an existing token, including a simulated Treasury approval workflow.
-* `src/features/TokenManagement/BurnTokenScreen.js`: Screen/form for burning (destroying) units of an existing token, including a simulated multi-stage (Compliance, Treasury) approval workflow and irreversibility warnings.
-* `src/features/TokenManagement/RedeemTokenScreen.js`: Screen/form for redeeming tokens (either for underlying value or swapping for another platform token). Includes preview calculations, simulated multi-stage approval, and an optional simulated smart contract execution view.
-* `src/features/TokenManagement/ReserveManagementScreen.js`: Screen for viewing token reserve details. Displays data from local dummy structures (predefined assets) or generates fallback data (wizard assets). Allows configuration of reserve ratio alerts (managed locally) and generation of simulated reports.
-* `src/features/TokenManagement/AssetDetailView.js`: Screen displaying detailed information for a selected token. Adapts content based on whether the token is wizard-issued or predefined. Includes simulated pause/unpause workflow for wizard tokens.
 
 **Utilities & Data:**
-
-* `src/utils/displayUtils.js`: Contains helper functions for formatting UI elements (rendering errors, getting status badge classes, formatting currency amounts).
-* `src/utils/dummyData.js`: Contains a function (`generateDummyClientAccounts`) to create sample client account data.
-* `src/data/initialData.js`: Provides initial static data, including predefined institutional assets, mappings for asset/blockchain logos, and sample entity names.
-* `src/features/Payments/data/paymentConstants.js`: Centralizes constants (dropdown lists, rates, fees) and extensive dummy data (templates, recurring payments, payment history) specifically for the Payments feature.
-
-**Features - Custody Management:** *(All located in `src/features/Custody/`)*
-
-* `CustodyDashboard.js`: Main container for the feature. Manages `custodyView` state for internal navigation. Manages `operationsLog` and `pendingApprovals` state for the demo. Integrates all other Custody components. Contains handler logic for forms and approvals, dispatching updates to `AssetsContext` and modifying local state.
-* `VaultTypeSummaryCard.js`: Reusable card to display summary info for Physical, Digital, Cold storage tiers. Reads aggregated data calculated in `CustodyDashboard`.
-* `VaultOperationsLogTable.js`: Reusable table to display custody operations log entries. Reads `operationsLog` state passed from `CustodyDashboard`.
-* `VaultAnalytics.js`: Displays asset allocation (calculated from `AssetsContext` data) and static KPIs.
-* `VaultQuickActions.js`: Displays action buttons (Deposit, Withdrawal, Audit, Report) and calls handlers defined in `CustodyDashboard`.
-* `CustodyReporting.js`: Form for configuring custody reports (based on old UI). Placeholder submission logic.
-* `ApprovalQueue.js`: Displays items from `pendingApprovals` state. Approve/Reject buttons call handlers in `CustodyDashboard`.
-* `ColdStorageView.js`: Displays assets with `custodyType: 'Cold'`. Includes placeholder form/actions for transfers out (calling handler in `CustodyDashboard`).
-* `PhysicalVaultsView.js`: Displays assets with `physicality: 'Physical'`. Includes placeholder actions for viewing details and requesting audits (calling handler in `CustodyDashboard`).
-* `DigitalVaultsView.js`: Displays assets with `custodyType: 'Hot'` or `'Warm'`. Includes placeholder actions for viewing details/policy and rebalancing (calling handler in `CustodyDashboard`).
-* `InitiateDepositForm.js`: Form for initiating deposits. Calls handler in `CustodyDashboard` on submit.
-* `RequestWithdrawalForm.js`: Form for requesting withdrawals. Calls handler in `CustodyDashboard` on submit (which adds to approvals).
-* `ScheduleAuditForm.js`: Form for scheduling audits. Calls handler in `CustodyDashboard` on submit.
-* `FullOperationsLogView.js`: Displays the full operations log (from `operationsLog` state) with basic filtering.
+* `src/utils/displayUtils.js`: Contains helper functions for formatting UI elements (rendering errors, status badges, currency, numbers, booleans).
+* `src/utils/dummyData.js`: Contains a function (`generateDummyClientAccounts`) to create sample client account data with enriched metadata.
+* `src/utils/metricsData.js`: Provides detailed dummy reserve data (`detailedDummyReserveData`) and functions for calculating reserve composition, alert thresholds, and generating circulation history for Token Management.
+* `src/data/initialData.js`: Provides initial static data, including predefined institutional assets, mappings for asset/blockchain logos, sample entity names, and hardcoded asset details.
+* `src/data/mockCustodyData.js`: Provides dummy data for the Custody feature's operations log and initial pending approvals queue.
+* `src/features/Payments/data/paymentConstants.js`: Centralizes constants (dropdown lists, rates, fees) and extensive dummy 
 
 **Configuration:**
 
@@ -178,18 +195,39 @@ Here's a summary of each analyzed file:
  Builds the app for production to the `build` folder.\
  It correctly bundles React in production mode and optimizes the build for the best performance. Your app is ready to be deployed!
 
- ## Key Concepts / State Management
+## Key Concepts / State Management
 
-* **Container Components:** `PaymentsDashboard.js` and `TokenDashboard.js` act as controllers for their respective features, managing internal navigation (`currentView` state) and orchestrating actions within the feature.
-* **Top-Level State:** `App.js` likely manages crucial application-wide state, such as the list of `assets` and the global `paymentHistory`. It passes this state and corresponding update functions (`setAssets`, `onAddHistoryEntry`, etc.) down as props.
-* **Local State:** Components manage their own UI state (e.g., modal visibility, filters, form inputs, workflow steps) using `useState`. Some components like `ViewTemplatesScreen`, `ManageRecurringPaymentsScreen`, and `TokenDashboard` also manage feature-specific data (templates, recurring schedules, token action history) locally.
-* **Reusable Components:** The project utilizes reusable components like `Layout`, `Sidebar`, `PaymentHistoryTable`, and various modals to maintain consistency and reduce duplication.
-* **Props Drilling:** State and callbacks are passed down through multiple component levels (e.g., `App` -> `PaymentsDashboard` -> `CreatePaymentScreen`). For larger applications, consider state management libraries (Context API, Redux, Zustand) might be beneficial.
-* **Simulated Actions:** Many actions that would typically involve backend interaction (saving data, approvals, processing) are simulated using `setTimeout` and `window.confirm`/`alert` for demonstration.
+* **React Context API:** The primary state management approach, replacing the previous prop drilling method. `App.js` wraps the application in multiple context providers.
+* **Context Providers:** Specific providers manage distinct slices of application state:
+    * `AssetsProvider` (`AssetsContext.js`): Manages the list of all assets (institutional, client, wizard-issued), handling updates like balance changes, minting, burning, and redemption via `useReducer`.
+    * `PaymentHistoryProvider` (`PaymentHistoryContext.js`): Manages the global list of payment history entries using `useReducer`.
+    * `TokenHistoryProvider` (`TokenHistoryContext.js`): Manages the history log for token-specific actions (issue, mint, burn, etc.) using `useReducer`.
+    * `TemplatesProvider` (`TemplatesContext.js`): Manages the list of saved payment templates (both single and bulk) using `useReducer`.
+    * `RecurringPaymentsProvider` (`RecurringPaymentsContext.js`): Manages recurring payment schedules using `useReducer`.
+    * `ActiveBulkProvider` (`ActiveBulkContext.js`): Manages the state of currently active/processing bulk payment files using `useReducer`.
+    * `AssetOrdersProvider` (`AssetOrdersContext.js`): Manages the state of asset orders (e.g., sales, transfers) within the Treasury module using `useReducer`.
+* **Custom Hooks:** Each context exports a custom hook (e.g., `useAssets`, `usePaymentHistory`, `useAssetOrders`) to provide easy access to the context's state and dispatch function within components.
+* **Feature Dashboards as Orchestrators:** Components like `PaymentsDashboard.js`, `TokenDashboard.js`, `CustodyDashboard.js`, and `TreasuryDashboard.js` still act as controllers for their respective features. They manage internal navigation (e.g., `currentView` state) and orchestrate actions by calling functions that often dispatch actions to the relevant contexts.
+* **Local Component State:** Standard React `useState` is used within individual components to manage UI-specific state (e.g., modal visibility, form inputs, filters, workflow steps).
+* **Simulated Actions:** Many actions that would typically involve backend interaction (saving data, approvals, processing) are simulated using `setTimeout` and browser dialogs (`window.confirm`, `prompt`) for demonstration purposes within component handlers or context reducers.
+
 
 ## Dependencies & Configuration
 
-* **Core:** React
-* **Styling:** Tailwind CSS (configured via `tailwind.config.js` with custom theme variables)
-* **Utilities:** `date-fns`, `react-big-calendar`
-* **Data:** Initial/dummy data is sourced from `src/data/initialData.js` and `src/features/Payments/data/paymentConstants.js`, as well as defined locally within some components (`TokenDashboard`, `ViewTemplatesScreen`, `ReserveManagementScreen`, etc.).
+* **Core:** React (`react`, `react-dom`)
+* **Styling:** Tailwind CSS (`tailwindcss`) - Configured via `tailwind.config.js` with custom theme variables.
+* **Utilities:**
+    * `date-fns`: For date manipulation and formatting.
+    * `react-big-calendar`: Used in `ManageRecurringPaymentsScreen` for the calendar view. Requires `date-fns` localizer setup.
+    * `recharts`: Used in `TokenMetricsDashboard` for rendering charts (specifically `MonthlyStackedBarChart`).
+* **State Management:** React Context API (implemented via custom providers and hooks).
+* **Data Sources:**
+    * Initial/dummy data is loaded from various files:
+        * `src/data/initialData.js` (Assets, Logos, Entities, Hardcoded Details)
+        * `src/features/Payments/data/paymentConstants.js` (Payment-specific constants, Rates, Dummy History/Templates/Recurring/Bulk/Recipients)
+        * `src/utils/dummyData.js` (Client account generation)
+        * `src/utils/metricsData.js` (Reserve details, History generation)
+        * `src/data/mockCustodyData.js` (Custody logs/approvals)
+    * State contexts (`AssetsContext`, `PaymentHistoryContext`, etc.) manage this data after initialization.
+* **Configuration Files:**
+    * `tailwind.config.js`: Defines Tailwind CSS theme extensions, custom variables, and content paths.

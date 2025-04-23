@@ -18,13 +18,13 @@ const VaultAnalytics = ({ assets = [] }) => {
     const allocationData = useMemo(() => {
         // Define categories structure correctly
         const allocation = {
-            'Commodity-PreciousMetal': { label: 'Precious Metals', value: 0, color: 'bg-yellow-500' },
-            'CryptoCurrency': { label: 'Crypto Assets', value: 0, color: 'bg-blue-500' },
+            'Commodity: Precious Metal': { label: 'Precious Metals', value: 0, color: 'bg-yellow-500' },
+            'Cryptocurrency': { label: 'Crypto Assets', value: 0, color: 'bg-blue-500' },
             'Stablecoin': { label: 'Stablecoins', value: 0, color: 'bg-green-500' },
             'Security': { label: 'Tokenized Securities', value: 0, color: 'bg-purple-500' },
             'CBDC': { label: 'CBDC', value: 0, color: 'bg-sky-500' }, // Added CBDC
             'Other': { label: 'Other Assets', value: 0, color: 'bg-gray-500' }
-            // Add more specific categories if needed (e.g., RealEstate, CarbonCredit)
+            // Add more specific categories if needed (e.g., RealEstate, Carbon Credit)
         };
         let totalValue = 0;
 
@@ -51,7 +51,7 @@ const VaultAnalytics = ({ assets = [] }) => {
                     totalValue += usdValue;
                     let categoryAssigned = false;
                     // Assign to specific categories based on assetClass
-                    if (asset.assetClass === 'Commodity-PreciousMetal') { allocation['Commodity-PreciousMetal'].value += usdValue; categoryAssigned = true; }
+                    if (asset.assetClass === 'Commodity: Precious Metal') { allocation['Commodity: Precious Metal'].value += usdValue; categoryAssigned = true; }
                     else if (asset.assetClass === 'CryptoCurrency') { allocation['CryptoCurrency'].value += usdValue; categoryAssigned = true; }
                     else if (asset.assetClass === 'Stablecoin') { allocation['Stablecoin'].value += usdValue; categoryAssigned = true; }
                     else if (asset.assetClass?.startsWith('Security')) { allocation['Security'].value += usdValue; categoryAssigned = true; }
