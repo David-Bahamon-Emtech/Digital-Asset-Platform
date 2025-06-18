@@ -26,10 +26,10 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     // Use flex column and h-full to enable pushing footer down
     <div className="w-64 bg-sidebar-bg text-sidebar-text h-screen fixed top-0 left-0 flex flex-col">
 
-      {/* Logo Area (Currently no outer padding: p-0) */}
-      <div className="p-0">
+      {/* Logo Area with top padding */}
+      <div className="pt-6 px-4"> {/* CHANGED: Added top and horizontal padding */}
         {/* Container for the logo itself */}
-        <div className="mb-2 p-2 rounded">
+        <div className="mb-10 p-2 rounded">
           <EmtechLogo logoUrl={currentLogoUrl} altText="Dashboard Logo" />
         </div>
       </div>
@@ -40,8 +40,8 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
         {/* Top border */}
          <div className="border-b border-gray-600 pb-2"></div>
 
-{/* Map navigation items */}
-{sidebarItems.map(item => (
+        {/* Map navigation items */}
+        {sidebarItems.map(item => (
           <div
             key={item.id}
             className={`flex items-center py-2 px-4 -mx-4 mt-1 mb-1 cursor-pointer rounded ${ // Added flex and items-center
