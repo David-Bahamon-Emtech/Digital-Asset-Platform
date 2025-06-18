@@ -1,4 +1,4 @@
-// src/data/initialData.js
+// src/data/initialData.jsx
 
 /**
  * Initial list of institutional digital assets managed by the platform.

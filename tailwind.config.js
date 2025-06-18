@@ -1,11 +1,11 @@
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
   content: [
-    "./src/**/*.{js,jsx,ts,tsx}", // Tells Tailwind where to find classes
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
-      // Map CSS variables to Tailwind color names
       colors: {
         'sidebar-bg': 'var(--sidebar-bg)',
         'sidebar-text': 'var(--sidebar-text)',
